@@ -163,11 +163,17 @@ default_grab_button(struct weston_pointer_grab *grab,
 	}
 }
 
+static void
+default_grab_pointer_cancel(struct weston_pointer_grab *grab)
+{
+}
+
 static const struct weston_pointer_grab_interface
 				default_pointer_grab_interface = {
 	default_grab_focus,
 	default_grab_motion,
-	default_grab_button
+	default_grab_button,
+	default_grab_pointer_cancel,
 };
 
 static void
@@ -226,10 +232,16 @@ default_grab_touch_motion(struct weston_touch_grab *grab, uint32_t time,
 	}
 }
 
+static void
+default_grab_touch_cancel(struct weston_touch_grab *grab)
+{
+}
+
 static const struct weston_touch_grab_interface default_touch_grab_interface = {
 	default_grab_touch_down,
 	default_grab_touch_up,
-	default_grab_touch_motion
+	default_grab_touch_motion,
+	default_grab_touch_cancel,
 };
 
 static void
@@ -321,10 +333,16 @@ default_grab_modifiers(struct weston_keyboard_grab *grab, uint32_t serial,
 	}
 }
 
+static void
+default_grab_keyboard_cancel(struct weston_keyboard_grab *grab)
+{
+}
+
 static const struct weston_keyboard_grab_interface
 				default_keyboard_grab_interface = {
 	default_grab_key,
 	default_grab_modifiers,
+	default_grab_keyboard_cancel,
 };
 
 static void
@@ -586,6 +604,12 @@ weston_keyboard_end_grab(struct weston_keyboard *keyboard)
 	keyboard->grab = &keyboard->default_grab;
 }
 
+static void
+weston_keyboard_cancel_grab(struct weston_keyboard *keyboard)
+{
+	keyboard->grab->interface->cancel(keyboard->grab);
+}
+
 WL_EXPORT void
 weston_pointer_start_grab(struct weston_pointer *pointer,
 			  struct weston_pointer_grab *grab)
@@ -602,6 +626,12 @@ weston_pointer_end_grab(struct weston_pointer *pointer)
 	pointer->grab->interface->focus(pointer->grab);
 }
 
+static void
+weston_pointer_cancel_grab(struct weston_pointer *pointer)
+{
+	pointer->grab->interface->cancel(pointer->grab);
+}
+
 WL_EXPORT void
 weston_touch_start_grab(struct weston_touch *touch, struct weston_touch_grab *grab)
 {
@@ -613,6 +643,12 @@ WL_EXPORT void
 weston_touch_end_grab(struct weston_touch *touch)
 {
 	touch->grab = &touch->default_grab;
+}
+
+static void
+weston_touch_cancel_grab(struct weston_touch *touch)
+{
+	touch->grab->interface->cancel(touch->grab);
 }
 
 WL_EXPORT void
@@ -1040,10 +1076,7 @@ notify_keyboard_focus_out(struct weston_seat *seat)
 	}
 
 	weston_keyboard_set_focus(keyboard, NULL);
-	/* FIXME: We really need keyboard grab cancel here to
-	 * let the grab shut down properly.  As it is we leak
-	 * the grab data. */
-	weston_keyboard_end_grab(keyboard);
+	weston_keyboard_cancel_grab(keyboard);
 }
 
 WL_EXPORT void
@@ -1681,6 +1714,7 @@ weston_seat_release_keyboard(struct weston_seat *seat)
 	seat->keyboard_device_count--;
 	if (seat->keyboard_device_count == 0) {
 		weston_keyboard_set_focus(seat->keyboard, NULL);
+		weston_keyboard_cancel_grab(seat->keyboard);
 		seat_send_updated_caps(seat);
 	}
 }
@@ -1718,6 +1752,7 @@ weston_seat_release_pointer(struct weston_seat *seat)
 		weston_pointer_set_focus(pointer, NULL,
 					 wl_fixed_from_int(0),
 					 wl_fixed_from_int(0));
+		weston_pointer_cancel_grab(pointer);
 
 		if (pointer->sprite)
 			pointer_unmap_sprite(pointer);
@@ -1755,6 +1790,7 @@ weston_seat_release_touch(struct weston_seat *seat)
 	seat->touch_device_count--;
 	if (seat->touch_device_count == 0) {
 		weston_touch_set_focus(seat, NULL);
+		weston_touch_cancel_grab(seat->touch);
 		seat_send_updated_caps(seat);
 	}
 }
