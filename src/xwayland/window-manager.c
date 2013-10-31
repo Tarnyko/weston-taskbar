@@ -938,14 +938,18 @@ weston_wm_window_draw_decoration(void *data)
 						  window->height + 2);
 		}
 		weston_surface_geometry_dirty(window->surface);
-	}
 
-	if (window->surface && !window->fullscreen) {
 		pixman_region32_fini(&window->surface->pending.input);
-		pixman_region32_init_rect(&window->surface->pending.input,
-					  t->margin, t->margin,
-					  width - 2 * t->margin,
-					  height - 2 * t->margin);
+
+		if (window->fullscreen) {
+			pixman_region32_init_rect(&window->surface->pending.input,
+						  0, 0, window->width, window->height);
+		} else if (window->decorate) {
+			pixman_region32_init_rect(&window->surface->pending.input,
+						  t->margin, t->margin,
+						  width - 2 * t->margin,
+						  height - 2 * t->margin);
+		}
 	}
 }
 
