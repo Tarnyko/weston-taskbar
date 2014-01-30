@@ -24,4 +24,26 @@
 
   </interface>
 
+  <interface name="taskbar" version="1">
+    <description summary="taskbar">
+      An interface for managing surfaces in taskbar.
+    </description>
+
+    <request name="move_surface">
+      <description summary="move surface to taskbar">
+	Move the given surface to the taskbar.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="add_button">
+      <description summary="add button to taskbar">
+	Add a button to the taskbar.
+      </description>
+      <arg name="id" type="uint"/>
+      <arg name="name" type="string"/>
+    </request>
+
+  </interface>
+
 </protocol>

@@ -7,12 +7,22 @@
       background, panels and locking surfaces.
     </description>
 
+    <request name="set_shown">
+      <arg name="id" type="uint"/>
+      <arg name="state" type="uint"/>
+    </request>
+
     <request name="set_background">
       <arg name="output" type="object" interface="wl_output"/>
       <arg name="surface" type="object" interface="wl_surface"/>
     </request>
 
     <request name="set_panel">
+      <arg name="output" type="object" interface="wl_output"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="set_taskbar">
       <arg name="output" type="object" interface="wl_output"/>
       <arg name="surface" type="object" interface="wl_surface"/>
     </request>
@@ -69,6 +79,16 @@
 	grab surface.
       </description>
       <arg name="cursor" type="uint"/>
+    </event>
+
+    <event name="map">
+      <arg name="id" type="uint"/>
+      <arg name="name" type="string"/>
+    </event>
+
+   <event name="unmap">
+      <arg name="id" type="uint"/>
+      <arg name="name" type="string"/>
     </event>
 
     <enum name="cursor">

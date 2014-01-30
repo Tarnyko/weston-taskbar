@@ -371,6 +371,10 @@ window_set_fullscreen(struct window *window, int fullscreen);
 void
 window_set_fullscreen_method(struct window *window,
 			     enum wl_shell_surface_fullscreen_method method);
+
+void
+window_set_minimized(struct window *window, int minimized);
+
 int
 window_is_maximized(struct window *window);
 

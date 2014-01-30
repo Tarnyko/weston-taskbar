@@ -85,6 +85,11 @@ struct input_panel_surface {
 	uint32_t panel;
 };
 
+struct taskbar {
+	struct weston_layer layer;
+	unsigned int id_count;
+};
+
 struct desktop_shell {
 	struct weston_compositor *compositor;
 
@@ -100,6 +105,11 @@ struct desktop_shell {
 	struct weston_layer background_layer;
 	struct weston_layer lock_layer;
 	struct weston_layer input_panel_layer;
+	struct weston_layer taskbar_layer;
+
+	struct taskbar *shell_taskbar;
+	struct weston_surface *shell_taskbar_surface;
+	struct wl_listener shell_taskbar_surface_listener;
 
 	struct wl_listener pointer_focus_listener;
 	struct weston_surface *grab_surface;
@@ -164,6 +174,9 @@ struct desktop_shell {
 	uint32_t binding_modifier;
 	enum animation_type win_animation_type;
 	enum animation_type startup_animation_type;
+
+	 /* for the taskbar, memorize toplevel shell surfaces */
+	struct wl_list shsurf_list;
 };
 
 enum shell_surface_type {
@@ -196,6 +209,7 @@ struct shell_surface {
 	bool saved_position_valid;
 	bool saved_rotation_valid;
 	int unresponsive;
+	unsigned int id;
 
 	struct {
 		struct weston_transform transform;
@@ -446,6 +460,9 @@ shell_configuration(struct desktop_shell *shell)
 	weston_config_section_get_string(section, "animation", &s, "none");
 	shell->win_animation_type = get_animation_type(s);
 	free(s);
+	 /* TO BE IMPLEMENTED */
+	/* weston_config_section_get_string(section, "taskbar", &s, "true");
+	free(s); */
 	weston_config_section_get_string(section,
 					 "startup-animation", &s, "fade");
 	shell->startup_animation_type = get_animation_type(s);
@@ -660,6 +677,31 @@ activate_workspace(struct desktop_shell *shell, unsigned int index)
 	wl_list_insert(&shell->panel_layer.link, &ws->layer.link);
 
 	shell->workspaces.current = index;
+}
+
+static struct taskbar *
+taskbar_create(void)
+{
+	struct taskbar *tb = malloc(sizeof *tb);
+	if (tb == NULL)
+		return NULL;
+
+	weston_layer_init(&tb->layer, NULL);
+	tb->id_count = 0;
+	return tb;
+}
+
+static struct taskbar *
+get_taskbar(struct desktop_shell *shell)
+{
+	struct taskbar *tb = shell->shell_taskbar;
+	return tb;
+}
+
+static void
+activate_taskbar(struct desktop_shell *shell)
+{
+	/* DO NOTHING YET (WE DON'T SHOW ANYTHING) */
 }
 
 static unsigned int
@@ -1047,6 +1089,68 @@ static const struct workspace_manager_interface workspace_manager_implementation
 };
 
 static void
+move_surface_to_taskbar(struct desktop_shell *shell, struct weston_surface *surface)
+{
+	struct workspace *current_ws;
+	struct taskbar *tb;
+	struct weston_seat *seat;
+	struct weston_surface *focus;
+
+	assert(weston_surface_get_main_surface(surface) == surface);
+
+	current_ws = get_current_workspace(shell);
+	tb = get_taskbar(shell);
+
+	wl_list_remove(&surface->layer_link);
+	wl_list_insert(&tb->layer.surface_list, &surface->layer_link);
+
+	drop_focus_state (shell, current_ws, surface);
+	wl_list_for_each(seat, &shell->compositor->seat_list, link) {
+		if (!seat->keyboard)
+			continue;
+
+		focus = weston_surface_get_main_surface(seat->keyboard->focus);
+		if (focus == surface)
+			weston_keyboard_set_focus(seat->keyboard, NULL);
+	}
+
+	weston_surface_damage_below(surface);
+}
+
+static void
+taskbar_move_surface(struct wl_client *client,
+			       struct wl_resource *resource,
+			       struct wl_resource *surface_resource)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	struct weston_surface *surface =
+		wl_resource_get_user_data(surface_resource);
+	struct weston_surface *main_surface;
+
+	main_surface = weston_surface_get_main_surface(surface);
+	move_surface_to_taskbar(shell, main_surface);
+}
+
+static void
+taskbar_add_button(struct wl_client *client,
+			       struct wl_resource *resource,
+				   uint32_t id,
+				   const char *name)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+
+	desktop_shell_send_map(shell->child.desktop_shell,
+							id, name);
+
+	/* TO BE COMPLETED */
+}
+
+static const struct taskbar_interface taskbar_implementation = {
+	taskbar_move_surface,
+	taskbar_add_button
+};
+
+static void
 unbind_resource(struct wl_resource *resource)
 {
 	wl_list_remove(wl_resource_get_link(resource));
@@ -1076,6 +1180,26 @@ bind_workspace_manager(struct wl_client *client,
 	workspace_manager_send_state(resource,
 				     shell->workspaces.current,
 				     shell->workspaces.num);
+}
+
+static void
+bind_taskbar(struct wl_client *client,
+		       void *data, uint32_t version, uint32_t id)
+{
+	struct desktop_shell *shell = data;
+	struct wl_resource *resource;
+
+	resource = wl_resource_create(client,
+				      &taskbar_interface, 1, id);
+
+	if (resource == NULL) {
+		weston_log("couldn't add taskbar object");
+		return;
+	}
+
+	wl_resource_set_implementation(resource,
+				       &taskbar_implementation,
+				       shell, unbind_resource);
 }
 
 static void
@@ -2384,6 +2508,15 @@ destroy_shell_surface(struct shell_surface *shsurf)
 {
 	wl_signal_emit(&shsurf->destroy_signal, shsurf);
 
+	 /* send signal for taskbar */
+	struct desktop_shell *shell = shsurf->shell;
+	const char *title = "<Default>";
+
+	if (shsurf->title)
+			title = strdup(shsurf->title);
+	desktop_shell_send_unmap(shsurf->shell->child.desktop_shell,
+							 shsurf->id, title);
+
 	if (!wl_list_empty(&shsurf->popup.grab_link)) {
 		remove_popup_grab(shsurf);
 	}
@@ -2734,6 +2867,72 @@ desktop_shell_set_lock_surface(struct wl_client *client,
 }
 
 static void
+desktop_shell_set_shown(struct wl_client *client,
+			       struct wl_resource *resource,
+			       uint32_t id,
+				   uint32_t state)
+{
+	 /* receive desktop-shell taskbar signal to show/hide */
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	struct shell_surface *shsurf;
+
+	 /* iterate on the memorized toplevel shell_surfaces */
+	wl_list_for_each(shsurf, &shell->shsurf_list, link) {
+		if (shsurf->id == id) {
+			/* this surface's ID corresponds ! */
+			if (!state) {
+				move_surface_to_taskbar(shell, shsurf->surface); }
+			else {
+				struct workspace *ws;
+				ws = get_current_workspace(shsurf->shell);
+
+				wl_list_remove(&shsurf->surface->layer_link);
+				wl_list_insert(&ws->layer.surface_list, &shsurf->surface->layer_link);
+			}
+		}
+	}	
+}
+
+static void
+taskbar_configure(struct weston_surface *es, int32_t sx, int32_t sy, int32_t width, int32_t height)
+{
+	struct desktop_shell *shell = es->configure_private;
+
+    int32_t current_y = es->output->y;
+	es->output->y = 32;
+	configure_static_surface(es, &shell->taskbar_layer, width, height);
+	es->output->y = current_y;
+}
+
+static void
+desktop_shell_set_taskbar(struct wl_client *client,
+			       struct wl_resource *resource,
+			       struct wl_resource *output_resource,
+			       struct wl_resource *surface_resource)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	struct weston_surface *surface =
+		wl_resource_get_user_data(surface_resource);
+
+	if (surface->configure) {
+		wl_resource_post_error(surface_resource,
+				       WL_DISPLAY_ERROR_INVALID_OBJECT,
+				       "surface role already assigned");
+		return;
+	}
+
+	/* send post-creation configure request to desktop-shell taskbar */
+	surface->configure = taskbar_configure;
+	surface->configure_private = shell;
+	surface->output = wl_resource_get_user_data(output_resource);
+	desktop_shell_send_configure(resource, 0,
+				     surface_resource,
+				     surface->output->width,
+				     surface->output->height);
+
+}
+
+static void
 resume_desktop(struct desktop_shell *shell)
 {
 	struct workspace *ws = get_current_workspace(shell);
@@ -2793,8 +2992,10 @@ desktop_shell_desktop_ready(struct wl_client *client,
 }
 
 static const struct desktop_shell_interface desktop_shell_implementation = {
+	desktop_shell_set_shown,
 	desktop_shell_set_background,
 	desktop_shell_set_panel,
+	desktop_shell_set_taskbar,
 	desktop_shell_set_lock_surface,
 	desktop_shell_unlock,
 	desktop_shell_set_grab_surface,
@@ -3616,6 +3817,7 @@ map(struct desktop_shell *shell, struct weston_surface *surface,
 	struct weston_surface *parent;
 	struct weston_seat *seat;
 	struct workspace *ws;
+	struct taskbar *tb;
 	int panel_height = 0;
 	int32_t surf_x, surf_y;
 
@@ -3627,6 +3829,22 @@ map(struct desktop_shell *shell, struct weston_surface *surface,
 	switch (surface_type) {
 	case SHELL_SURFACE_TOPLEVEL:
 		weston_surface_set_initial_position(surface, shell);
+
+		/* TASKBAR : only detect toplevel surfaces for now */
+		const char *title = "<Default>";
+		if (shsurf->title)
+			title = strdup(shsurf->title);
+		/* */
+		struct taskbar *tb;
+		tb = get_taskbar(shsurf->shell);
+		tb->id_count++;					/* increment the ID counter */
+		shsurf->id = tb->id_count;		/* map the ID to the shell_surface */
+		/* send a signal to desktop-shell for the taskbar */
+		desktop_shell_send_map(shsurf->shell->child.desktop_shell,
+		  						shsurf->id, title);
+		 /* track this shell_surface for later manipulation */
+		wl_list_insert(&shsurf->shell->shsurf_list, &shsurf->link);
+
 		break;
 	case SHELL_SURFACE_FULLSCREEN:
 		center_on_output(surface, shsurf->fullscreen_output);
@@ -3649,7 +3867,7 @@ map(struct desktop_shell *shell, struct weston_surface *surface,
 					    surface->geometry.y + sy);
 		break;
 	default:
-		;
+		break;
 	}
 
 	/* surface stacking order, see also activate() */
@@ -4194,6 +4412,21 @@ switcher_next(struct switcher *switcher)
 	struct weston_surface *first = NULL, *prev = NULL, *next = NULL;
 	struct shell_surface *shsurf;
 	struct workspace *ws = get_current_workspace(switcher->shell);
+	struct taskbar *tb = get_taskbar(switcher->shell); 
+	struct wl_list tbsurf_list;
+
+	wl_list_init(&tbsurf_list);
+	 /* temporary re-display surfaces from the taskbar while Super-Tabbing... */
+	wl_list_for_each(surface, &tb->layer.surface_list, layer_link) {
+			wl_list_remove(&surface->layer_link);
+			wl_list_insert(&ws->layer.surface_list, &surface->layer_link);
+			surface->alpha = 0.25;
+			weston_surface_geometry_dirty(surface);
+			weston_surface_damage(surface);
+				/* remember to hide it after that */
+			wl_list_insert(&tbsurf_list, &surface->link);
+			break;
+	}
 
 	wl_list_for_each(surface, &ws->layer.surface_list, layer_link) {
 		switch (get_shell_surface_type(surface)) {
@@ -4218,7 +4451,20 @@ switcher_next(struct switcher *switcher)
 			weston_surface_geometry_dirty(surface);
 			weston_surface_damage(surface);
 		}
+
 	}
+
+		/* re-hide the taskbar surface here, if it's not currently selected */
+	wl_list_for_each(surface, &tbsurf_list, link) {
+		if (surface != switcher->current) {
+			wl_list_remove(&surface->layer_link);
+			wl_list_insert(&tb->layer.surface_list, &surface->layer_link);
+			weston_surface_damage_below(surface);
+		}
+		surface->alpha = 1.0;
+	}
+	/* EMPTY THE LIST HERE */
+	/* XXXX */
 
 	if (next == NULL)
 		next = first;
@@ -4699,6 +4945,7 @@ module_init(struct weston_compositor *ec,
 	struct weston_seat *seat;
 	struct desktop_shell *shell;
 	struct workspace **pws;
+	struct taskbar *tb;
 	unsigned int i;
 	struct wl_event_loop *loop;
 
@@ -4731,10 +4978,12 @@ module_init(struct weston_compositor *ec,
 	ec->shell_interface.resize = surface_resize;
 	ec->shell_interface.set_title = set_title;
 
+		wl_list_init(&shell->shsurf_list);
 	wl_list_init(&shell->input_panel.surfaces);
 
 	weston_layer_init(&shell->fullscreen_layer, &ec->cursor_layer.link);
 	weston_layer_init(&shell->panel_layer, &shell->fullscreen_layer.link);
+	weston_layer_init(&shell->taskbar_layer, &shell->fullscreen_layer.link);
 	weston_layer_init(&shell->background_layer, &shell->panel_layer.link);
 	weston_layer_init(&shell->lock_layer, NULL);
 	weston_layer_init(&shell->input_panel_layer, NULL);
@@ -4743,6 +4992,12 @@ module_init(struct weston_compositor *ec,
 	wl_list_init(&shell->workspaces.client_list);
 
 	shell_configuration(shell);
+
+	tb = taskbar_create();
+	if (tb == NULL)
+			return -1;
+	shell->shell_taskbar = tb;
+	activate_taskbar(shell);
 
 	for (i = 0; i < shell->workspaces.num; i++) {
 		pws = wl_array_add(&shell->workspaces.array, sizeof *pws);
@@ -4778,6 +5033,10 @@ module_init(struct weston_compositor *ec,
 
 	if (wl_global_create(ec->wl_display, &workspace_manager_interface, 1,
 			     shell, bind_workspace_manager) == NULL)
+		return -1;
+
+	if (wl_global_create(ec->wl_display, &taskbar_interface, 1,
+			     shell, bind_taskbar) == NULL)
 		return -1;
 
 	shell->child.deathstamp = weston_compositor_get_time();

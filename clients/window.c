@@ -90,6 +90,7 @@ struct display {
 	struct wl_data_device_manager *data_device_manager;
 	struct text_cursor_position *text_cursor_position;
 	struct workspace_manager *workspace_manager;
+	struct taskbar *taskbar;
 	EGLDisplay dpy;
 	EGLConfig argb_config;
 	EGLContext argb_ctx;
@@ -140,7 +141,8 @@ enum {
 	TYPE_MAXIMIZED,
 	TYPE_TRANSIENT,
 	TYPE_MENU,
-	TYPE_CUSTOM
+	TYPE_CUSTOM,
+	TYPE_MINIMIZED
 };
 
 struct window_output {
@@ -2341,7 +2343,7 @@ frame_button_button_handler(struct widget *widget,
 			display_exit(window->display);
 		break;
 	case FRAME_BUTTON_MINIMIZE:
-		fprintf(stderr,"Minimize stub\n");
+		window_set_minimized(window, window->type != TYPE_MINIMIZED);
 		break;
 	case FRAME_BUTTON_MAXIMIZE:
 		window_set_maximized(window, window->type != TYPE_MAXIMIZED);
@@ -2369,7 +2371,7 @@ frame_button_touch_down_handler(struct widget *widget, struct input *input,
 			display_exit(window->display);
 		break;
 	case FRAME_BUTTON_MINIMIZE:
-		fprintf(stderr,"Minimize stub\n");
+		window_set_minimized(window, window->type != TYPE_MINIMIZED);
 		break;
 	case FRAME_BUTTON_MAXIMIZE:
 		window_set_maximized(window, window->type != TYPE_MAXIMIZED);
@@ -4285,6 +4287,34 @@ window_is_maximized(struct window *window)
 }
 
 void
+window_set_minimized(struct window *window, int minimized)
+{
+	if (!window->display->shell)
+		return;
+
+	if ((window->type == TYPE_MINIMIZED) == minimized)
+		return;
+
+	if (window->type == TYPE_TOPLEVEL) {
+		window->saved_allocation = window->main_surface->allocation;
+		taskbar_move_surface (window->display->taskbar, window->main_surface->surface);
+		//taskbar_add_button (window->display->taskbar, 1000, "<Default>");
+		window->type = TYPE_MINIMIZED;
+		window_defer_redraw_until_configure(window);
+	} else if (window->type == TYPE_FULLSCREEN) {
+		taskbar_move_surface (window->display->taskbar, window->main_surface->surface);
+		window->type = TYPE_MINIMIZED;
+		window_defer_redraw_until_configure(window);
+	} else {
+		wl_shell_surface_set_toplevel(window->shell_surface);
+		window->type = TYPE_TOPLEVEL;
+		window_schedule_resize(window,
+				       window->saved_allocation.width,
+				       window->saved_allocation.height);
+	}
+}
+
+void
 window_set_maximized(struct window *window, int maximized)
 {
 	if (!window->display->shell)
@@ -5044,6 +5074,19 @@ init_workspace_manager(struct display *d, uint32_t id)
 }
 
 static void
+init_taskbar(struct display *d, uint32_t id)
+{
+	d->taskbar =
+		wl_registry_bind(d->registry, id,
+				 &taskbar_interface, 1);
+	/* if once we need a listener... */
+	/*if (d->taskbar != NULL)
+		taskbar_add_listener(d->taskbar,
+					       &taskbar_listener,
+					       d);*/
+}
+
+static void
 shm_format(void *data, struct wl_shm *wl_shm, uint32_t format)
 {
 	struct display *d = data;
@@ -5093,6 +5136,8 @@ registry_handle_global(void *data, struct wl_registry *registry, uint32_t id,
 					 &text_cursor_position_interface, 1);
 	} else if (strcmp(interface, "workspace_manager") == 0) {
 		init_workspace_manager(d, id);
+	} else if (strcmp(interface, "taskbar") == 0) {
+		init_taskbar(d, id);
 	} else if (strcmp(interface, "wl_subcompositor") == 0) {
 		d->subcompositor =
 			wl_registry_bind(registry, id,
