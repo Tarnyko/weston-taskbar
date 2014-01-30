@@ -3867,7 +3867,7 @@ map(struct desktop_shell *shell, struct weston_surface *surface,
 					    surface->geometry.y + sy);
 		break;
 	default:
-		break;
+		;
 	}
 
 	/* surface stacking order, see also activate() */
