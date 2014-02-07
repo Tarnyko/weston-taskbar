@@ -69,6 +69,11 @@ struct workspace {
 	struct weston_view_animation *focus_animation;
 };
 
+struct taskbar {
+	struct weston_layer layer;
+	unsigned int id_count;
+};
+
 struct desktop_shell {
 	struct weston_compositor *compositor;
 
@@ -81,6 +86,7 @@ struct desktop_shell {
 
 	struct weston_layer fullscreen_layer;
 	struct weston_layer panel_layer;
+	struct weston_layer taskbar_layer;
 	struct weston_layer background_layer;
 	struct weston_layer lock_layer;
 	struct weston_layer input_panel_layer;
@@ -185,6 +191,10 @@ struct desktop_shell {
 
 	struct wl_listener output_create_listener;
 	struct wl_list output_list;
+
+	 /* for the taskbar, memorize toplevel shell surfaces */
+	struct taskbar *shell_taskbar;
+	struct wl_list shsurf_list;
 
 	char *client;
 };

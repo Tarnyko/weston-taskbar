@@ -17,6 +17,11 @@
       <arg name="surface" type="object" interface="wl_surface"/>
     </request>
 
+   <request name="set_taskbar">
+      <arg name="output" type="object" interface="wl_output"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
     <request name="set_lock_surface">
       <arg name="surface" type="object" interface="wl_surface"/>
     </request>
@@ -31,6 +36,15 @@
 	the grab_cursor event sent just before the enter event.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="set_minimize_surface">
+      <description summary="set minimize surface">
+	The surface set by this request will be asked to be minimized
+	or raised depending on the state argument.
+      </description>
+      <arg name="id" type="uint"/>
+      <arg name="state" type="uint"/>
     </request>
 
     <request name="desktop_ready" since="2">
@@ -71,6 +85,21 @@
       <arg name="cursor" type="uint"/>
     </event>
 
+    <event name="new_taskbar_handler">
+      <description summary="create a handler in the taskbar">
+	A taskbar handler has a numeral ID and a title. Add one.
+      </description>
+      <arg name="id" type="uint"/>
+      <arg name="title" type="string"/>
+    </event>
+
+    <event name="del_taskbar_handler">
+      <description summary="remove a handler from the taskbar">
+	A taskbar button has a numeral ID. Remove one.
+      </description>
+      <arg name="id" type="uint"/>
+    </event>
+
     <enum name="cursor">
       <entry name="none" value="0"/>
 
@@ -107,6 +136,6 @@
       <arg name="surface" type="object" interface="wl_surface"/>
       <arg name="output" type="object" interface="wl_output"/>
     </request>
-
   </interface>
+
 </protocol>

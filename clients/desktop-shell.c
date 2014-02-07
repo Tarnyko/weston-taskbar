@@ -85,6 +85,16 @@ struct panel {
 	uint32_t color;
 };
 
+struct taskbar {
+	struct surface base;
+	struct window *window;
+	struct widget *widget;
+	struct wl_list handler_list;
+	struct desktop *desktop;
+	int painted;
+	uint32_t color;
+};
+
 struct background {
 	struct surface base;
 	struct window *window;
@@ -102,6 +112,7 @@ struct output {
 	struct wl_list link;
 
 	struct panel *panel;
+	struct taskbar *taskbar;
 	struct background *background;
 };
 
@@ -123,6 +134,17 @@ struct panel_clock {
 	int clock_fd;
 };
 
+struct taskbar_handler {
+	struct widget *widget;
+	struct taskbar *taskbar;
+	cairo_surface_t *icon;
+	int focused, pressed;
+	unsigned int id;
+	char *title;
+    unsigned char state;
+	struct wl_list link;
+};
+
 struct unlock_dialog {
 	struct window *window;
 	struct widget *widget;
@@ -134,6 +156,12 @@ struct unlock_dialog {
 
 static void
 panel_add_launchers(struct panel *panel, struct desktop *desktop);
+
+static void
+taskbar_add_handler(struct taskbar *taskbar, unsigned int id, const char *title);
+
+static void
+taskbar_destroy_handler(struct taskbar_handler *handler);
 
 static void
 sigchild_handler(int s)
@@ -172,6 +200,8 @@ is_desktop_painted(struct desktop *desktop)
 
 	wl_list_for_each(output, &desktop->outputs, link) {
 		if (output->panel && !output->panel->painted)
+			return 0;
+		if (output->taskbar && !output->taskbar->painted)
 			return 0;
 		if (output->background && !output->background->painted)
 			return 0;
@@ -566,6 +596,213 @@ panel_create(struct desktop *desktop)
 	return panel;
 }
 
+static void
+taskbar_handler_activate(struct taskbar_handler *handler)
+{
+	 /* invert the button state */
+	if (handler->state == 0)
+		handler->state = 1;
+	else
+		handler->state = 0;
+
+	 /* request the compositor to minimize/raise the window */
+	desktop_shell_set_minimize_surface(handler->taskbar->desktop->shell,
+										handler->id, handler->state);
+}
+
+static void
+taskbar_handler_redraw_handler(struct widget *widget, void *data)
+{
+	struct taskbar_handler *handler = data;
+	struct rectangle allocation;
+	cairo_t *cr;
+
+	cr = widget_cairo_create(handler->taskbar->widget);
+
+	widget_get_allocation(widget, &allocation);
+	if (handler->pressed) {
+		allocation.x++;
+		allocation.y++;
+	}
+
+	cairo_set_source_surface(cr, handler->icon,
+				 allocation.x, allocation.y);
+	cairo_paint(cr);
+
+	cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+	/* cairo_set_font_size (cr, 20); */
+	cairo_move_to (cr, allocation.x+20, allocation.y+12);
+	cairo_show_text (cr, handler->title);
+
+	if (handler->focused) {
+		cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.4);
+		cairo_mask_surface(cr, handler->icon,
+				   allocation.x, allocation.y);
+	}
+
+	cairo_destroy(cr);
+}
+
+static void
+taskbar_redraw_handler(struct widget *widget, void *data)
+{
+	cairo_surface_t *surface;
+	cairo_t *cr;
+	struct taskbar *taskbar = data;
+
+	cr = widget_cairo_create(taskbar->widget);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	set_hex_color(cr, taskbar->color);
+	cairo_paint(cr);
+
+	cairo_destroy(cr);
+	surface = window_get_surface(taskbar->window);
+	cairo_surface_destroy(surface);
+	taskbar->painted = 1;
+	check_desktop_ready(taskbar->window);
+}
+
+static int
+taskbar_handler_enter_handler(struct widget *widget, struct input *input,
+			     float x, float y, void *data)
+{
+	struct taskbar_handler *handler = data;
+
+	handler->focused = 1;
+	widget_schedule_redraw(widget);
+
+	return CURSOR_LEFT_PTR;
+}
+
+static void
+taskbar_handler_leave_handler(struct widget *widget,
+			     struct input *input, void *data)
+{
+	struct taskbar_handler *handler = data;
+
+	handler->focused = 0;
+	/* no tooltip yet... */
+	/* widget_destroy_tooltip(widget); */
+	widget_schedule_redraw(widget);
+}
+
+static void
+taskbar_handler_button_handler(struct widget *widget,
+			      struct input *input, uint32_t time,
+			      uint32_t butt,
+			      enum wl_pointer_button_state state, void *data)
+{
+	struct taskbar_handler *handler;
+
+	handler = widget_get_user_data(widget);
+	widget_schedule_redraw(widget);
+	if (state == WL_POINTER_BUTTON_STATE_RELEASED)
+		taskbar_handler_activate(handler);
+
+}
+
+static void
+taskbar_button_handler(struct widget *widget,
+		     struct input *input, uint32_t time,
+		     uint32_t button,
+		     enum wl_pointer_button_state state, void *data)
+{
+	struct taskbar *taskbar = data;
+
+	/* DO NOTHING YET */
+}
+
+static void
+taskbar_resize_handler(struct widget *widget,
+		     int32_t width, int32_t height, void *data)
+{
+	struct taskbar_handler *handler;
+	struct taskbar *taskbar = data;
+	int x, y, w, h;
+	
+	x = 10;
+	y = 16;
+	wl_list_for_each(handler, &taskbar->handler_list, link) {
+		w = cairo_image_surface_get_width(handler->icon) + 120; // for text !
+		h = cairo_image_surface_get_height(handler->icon);
+		widget_set_allocation(handler->widget,
+				      x, y - h / 2, w + 1, h + 1);
+		x += w + 10;
+	}
+}
+
+static void
+taskbar_configure(void *data,
+		struct desktop_shell *desktop_shell,
+		uint32_t edges, struct window *window,
+		int32_t width, int32_t height)
+{
+	struct surface *surface = window_get_user_data(window);
+	struct taskbar *taskbar = container_of(surface, struct taskbar, base);
+
+	window_schedule_resize(taskbar->window, width, 32);
+}
+
+static void
+taskbar_destroy_handler(struct taskbar_handler *handler)
+{
+	free(handler->title);
+
+	cairo_surface_destroy(handler->icon);
+
+	widget_destroy(handler->widget);
+
+	 /* we cannot do the following here, because this is used by the iterator,
+	    which calls "taskbar_destroy_button()"... so do this in the iter instead */
+	wl_list_remove(&handler->link);
+
+	free(handler);
+}
+
+static void
+taskbar_remove(struct taskbar *taskbar)
+{
+	struct taskbar_handler *tmp;
+	struct taskbar_handler *handler;
+
+	wl_list_for_each_safe(handler, tmp, &taskbar->handler_list, link) {
+		taskbar_destroy_handler(handler);
+	}
+
+	widget_destroy(taskbar->widget);
+	window_destroy(taskbar->window);
+
+	free(taskbar);
+}
+
+static struct taskbar *
+taskbar_create(struct desktop *desktop)
+{
+	struct taskbar *taskbar;
+	struct weston_config_section *s;
+
+	taskbar = xzalloc(sizeof *taskbar);
+
+	taskbar->base.configure = taskbar_configure;
+	taskbar->desktop = desktop;
+	taskbar->window = window_create_custom(desktop->display);
+	taskbar->widget = window_add_widget(taskbar->window, taskbar);
+	wl_list_init(&taskbar->handler_list);
+
+	window_set_title(taskbar->window, "taskbar");
+	window_set_user_data(taskbar->window, taskbar);
+
+	widget_set_redraw_handler(taskbar->widget, taskbar_redraw_handler);
+	widget_set_resize_handler(taskbar->widget, taskbar_resize_handler);
+	widget_set_button_handler(taskbar->widget, taskbar_button_handler);
+
+	s = weston_config_get_section(desktop->config, "shell", NULL, NULL);
+	weston_config_section_get_uint(s, "taskbar-color",
+				       &taskbar->color, 0xaabbbbbb);
+
+	return taskbar;
+}
+
 static cairo_surface_t *
 load_icon_or_fallback(const char *icon)
 {
@@ -675,6 +912,38 @@ panel_add_launcher(struct panel *panel, const char *icon, const char *path)
 				  panel_launcher_redraw_handler);
 	widget_set_motion_handler(launcher->widget,
 				  panel_launcher_motion_handler);
+}
+
+static void
+taskbar_add_handler(struct taskbar *taskbar, unsigned int id, const char *title)
+{
+	struct taskbar_handler *handler;
+
+	handler = xzalloc(sizeof *handler);
+	handler->icon = load_icon_or_fallback(DATADIR "/weston/icon_window.png");
+	handler->id = id;
+	handler->title = strdup(title);	/* button name = wl_shell_surface title */
+    handler->state = 0;				/* 0 = will hide ; 1 = will show */
+
+	handler->taskbar = taskbar;
+	wl_list_insert(taskbar->handler_list.prev, &handler->link);
+
+	handler->widget = widget_add_widget(taskbar->widget, handler);
+	widget_set_enter_handler(handler->widget,
+				 taskbar_handler_enter_handler);
+	widget_set_leave_handler(handler->widget,
+				   taskbar_handler_leave_handler);
+	widget_set_button_handler(handler->widget,
+				    taskbar_handler_button_handler);
+	/* TO BE IMPLEMENTED */
+	/*widget_set_touch_down_handler(handler->widget,
+				      taskbar_handler_touch_down_handler);
+	widget_set_touch_up_handler(handler->widget,
+				    taskbar_handler_touch_up_handler);*/
+	widget_set_redraw_handler(handler->widget,
+				  taskbar_handler_redraw_handler);
+	/*widget_set_motion_handler(handler->widget,
+				  taskbar_handler_motion_handler);*/
 }
 
 enum {
@@ -1023,11 +1292,65 @@ desktop_shell_grab_cursor(void *data,
 	}
 }
 
-static const struct desktop_shell_listener listener = {
+static void
+desktop_shell_new_taskbar_handler(void *data,
+			struct desktop_shell *desktop_shell,
+			unsigned int id,
+			const char *title)
+{
+	/* receive request from the compositor, map the window to the taskbar */
+
+	struct desktop *desktop = data;
+	struct output *output;
+
+	wl_list_for_each(output, &desktop->outputs, link) {
+		if (output->taskbar && output->taskbar->painted) {
+			taskbar_add_handler (output->taskbar, id, title);
+			window_schedule_resize(output->taskbar->window, 1000, 32);
+		}
+	}
+
+}
+
+static void
+desktop_shell_del_taskbar_handler(void *data,
+			struct desktop_shell *desktop_shell,
+			unsigned int id)
+{
+	/* receive request from the compositor, unmap the window from the taskbar */
+
+	struct desktop *desktop = data;
+	struct output *output;
+
+	struct taskbar_handler *tmp;
+	struct taskbar_handler *handler;
+
+	wl_list_for_each(output, &desktop->outputs, link) {
+		if (output->taskbar && output->taskbar->painted) {
+			wl_list_for_each_safe(handler, tmp, &output->taskbar->handler_list, link) {
+				if (handler->id == id) {
+					taskbar_destroy_handler(handler);
+					window_schedule_resize(output->taskbar->window, 1000, 32);
+				}				
+			}
+		}
+	}
+
+}
+
+static const struct desktop_shell_listener desktop_shell_listener = {
 	desktop_shell_configure,
 	desktop_shell_prepare_lock_surface,
-	desktop_shell_grab_cursor
+	desktop_shell_grab_cursor,
+	desktop_shell_new_taskbar_handler,
+	desktop_shell_del_taskbar_handler
 };
+
+/*
+static const struct taskbar_listener taskbar_listener = {
+	taskbar_new_handler,
+	taskbar_del_handler
+};*/ //DON'T KNOW HOW TO IMPLEMENT AS SEPARATE LISTENER YET
 
 static void
 background_destroy(struct background *background)
@@ -1128,6 +1451,7 @@ output_destroy(struct output *output)
 {
 	background_destroy(output->background);
 	panel_destroy(output->panel);
+	taskbar_remove(output->taskbar);
 	wl_output_destroy(output->output);
 	wl_list_remove(&output->link);
 
@@ -1158,6 +1482,7 @@ output_handle_geometry(void *data,
 	struct output *output = data;
 
 	window_set_buffer_transform(output->panel->window, transform);
+	window_set_buffer_transform(output->taskbar->window, transform);
 	window_set_buffer_transform(output->background->window, transform);
 }
 
@@ -1185,6 +1510,7 @@ output_handle_scale(void *data,
 	struct output *output = data;
 
 	window_set_buffer_scale(output->panel->window, scale);
+	window_set_buffer_scale(output->taskbar->window, scale);
 	window_set_buffer_scale(output->background->window, scale);
 }
 
@@ -1203,6 +1529,11 @@ output_init(struct output *output, struct desktop *desktop)
 	output->panel = panel_create(desktop);
 	surface = window_get_wl_surface(output->panel->window);
 	desktop_shell_set_panel(desktop->shell,
+				output->output, surface);
+
+	output->taskbar = taskbar_create(desktop);
+	surface = window_get_wl_surface(output->taskbar->window);
+	desktop_shell_set_taskbar(desktop->shell,
 				output->output, surface);
 
 	output->background = background_create(desktop);
@@ -1245,7 +1576,7 @@ global_handler(struct display *display, uint32_t id,
 		desktop->shell = display_bind(desktop->display,
 					      id, &desktop_shell_interface,
 					      desktop->interface_version);
-		desktop_shell_add_listener(desktop->shell, &listener, desktop);
+		desktop_shell_add_listener(desktop->shell, &desktop_shell_listener, desktop);
 	} else if (!strcmp(interface, "wl_output")) {
 		create_output(desktop, id);
 	}

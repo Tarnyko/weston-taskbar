@@ -2399,7 +2399,7 @@ frame_handle_status(struct window_frame *frame, struct input *input,
 		widget_schedule_redraw(frame->widget);
 
 	if (status & FRAME_STATUS_MINIMIZE)
-		fprintf(stderr,"Minimize stub\n");
+		window_set_minimized(window);
 
 	if (status & FRAME_STATUS_MENU) {
 		window_show_frame_menu(window, input, time);
@@ -4192,6 +4192,19 @@ window_set_maximized(struct window *window, int maximized)
 		window_schedule_resize(window,
 				       window->saved_allocation.width,
 				       window->saved_allocation.height);
+	}
+}
+
+void
+window_set_minimized(struct window *window)
+{
+	if (!window->display->shell)
+		return;
+
+	if (window->type == TYPE_TOPLEVEL) {
+		set_minimized(window->shell_surface);
+		//taskbar_move_surface (window->display->taskbar, window->main_surface->surface);
+		window_defer_redraw_until_configure(window);
 	}
 }
 
