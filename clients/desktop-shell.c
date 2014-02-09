@@ -700,11 +700,9 @@ taskbar_destroy_button(struct taskbar_button *button)
 
 	widget_destroy(button->widget);
 
-	 /* we cannot do the following here, because this is used by the iterator,
-	    which calls "taskbar_destroy_button()"... so do this in the iter instead */
-	/* wl_list_remove(&button->link); */
+	wl_list_remove(&button->link);
 
-	/* free(button); */
+	free(button);
 }
 
 static void
@@ -1255,22 +1253,14 @@ desktop_shell_unmap(void *data,
 	struct output *output;
 
 	struct taskbar_button *button;
-	struct taskbar_button *previous_button; int was_removed = 0;
+	struct taskbar_button *tmp;
 
 	wl_list_for_each(output, &desktop->outputs, link) {
 		if (output->taskbar && output->taskbar->painted) {		
-			wl_list_for_each(button, &output->taskbar->button_list, link) {
-					 /* SO HACKY !!! USE "wl_list_for_each_safe()" INSTEAD ! */
-				if (was_removed == 1) {
-					wl_list_remove(&previous_button->link);
-					free (previous_button);
-					was_removed = 0;
-					window_schedule_resize(output->taskbar->window, 1000, 32);
-				}
+			wl_list_for_each_safe(button, tmp, &output->taskbar->button_list, link) {
 				if (button->id == id) {
 					taskbar_destroy_button (button);
-					previous_button = button;
-					was_removed = 1;
+					window_schedule_resize(output->taskbar->window, 1000, 32);
 				}
 			}
 

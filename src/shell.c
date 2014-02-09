@@ -1199,7 +1199,7 @@ bind_taskbar(struct wl_client *client,
 
 	wl_resource_set_implementation(resource,
 				       &taskbar_implementation,
-				       shell, unbind_resource);
+				       shell, NULL);
 }
 
 static void
@@ -2512,10 +2512,12 @@ destroy_shell_surface(struct shell_surface *shsurf)
 	struct desktop_shell *shell = shsurf->shell;
 	const char *title = "<Default>";
 
-	if (shsurf->title)
+	if (shsurf->id > 0) {
+		if (shsurf->title)
 			title = strdup(shsurf->title);
-	desktop_shell_send_unmap(shsurf->shell->child.desktop_shell,
-							 shsurf->id, title);
+		desktop_shell_send_unmap(shsurf->shell->child.desktop_shell,
+					 shsurf->id, title);
+	}
 
 	if (!wl_list_empty(&shsurf->popup.grab_link)) {
 		remove_popup_grab(shsurf);
