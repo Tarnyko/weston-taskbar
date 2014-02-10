@@ -67,7 +67,9 @@ typedef void *EGLContext;
 #include "../shared/cairo-util.h"
 #include "text-cursor-position-client-protocol.h"
 #include "workspaces-client-protocol.h"
+#ifdef HAVE_TASKBAR
 #include "xdg-shell-client-protocol.h"
+#endif
 #include "../shared/os-compatibility.h"
 
 #include "window.h"
@@ -91,7 +93,9 @@ struct display {
 	struct wl_data_device_manager *data_device_manager;
 	struct text_cursor_position *text_cursor_position;
 	struct workspace_manager *workspace_manager;
+#ifdef HAVE_TASKBAR
 	struct xdg_shell *xdg_shell;
+#endif
 	EGLDisplay dpy;
 	EGLConfig argb_config;
 	EGLContext argb_ctx;
@@ -4200,6 +4204,7 @@ window_set_maximized(struct window *window, int maximized)
 void
 window_set_minimized(struct window *window)
 {
+#ifdef HAVE_TASKBAR
 	if (!window->display->xdg_shell)
 		return;
 
@@ -4211,6 +4216,9 @@ window_set_minimized(struct window *window)
 			window_defer_redraw_until_configure(window);
 		}
 	}
+#else
+	fprintf(stderr,"Minimize stub\n");
+#endif
 }
 
 void
@@ -5030,9 +5038,11 @@ registry_handle_global(void *data, struct wl_registry *registry, uint32_t id,
 					 &text_cursor_position_interface, 1);
 	} else if (strcmp(interface, "workspace_manager") == 0) {
 		init_workspace_manager(d, id);
+#ifdef HAVE_TASKBAR
 	} else if (strcmp(interface, "xdg_shell") == 0) {
 		d->xdg_shell = wl_registry_bind(registry, id, &xdg_shell_interface, 1);
 		xdg_shell_use_unstable_version(d->xdg_shell, XDG_SHELL_VERSION_CURRENT);
+#endif
 	} else if (strcmp(interface, "wl_subcompositor") == 0) {
 		d->subcompositor =
 			wl_registry_bind(registry, id,

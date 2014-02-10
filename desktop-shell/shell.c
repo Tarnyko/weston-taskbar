@@ -1353,34 +1353,31 @@ bind_workspace_manager(struct wl_client *client,
 				     shell->workspaces.num);
 }
 
+/*
 static void
 taskbar_create_handler(struct wl_client *client,
 			       struct wl_resource *resource,
-				   uint32_t id,
-				   const char *title)
+			       uint32_t id,
+			       const char *title)
 {
 	struct desktop_shell *shell = wl_resource_get_user_data(resource);
 
 	desktop_shell_send_new_taskbar_handler(shell->child.desktop_shell,
-										 id, title);
-
-	/* TO BE COMPLETED */
+	                                       id, title);
 }
 
 static void
 taskbar_remove_handler(struct wl_client *client,
 			       struct wl_resource *resource,
-				   uint32_t id)
+			       uint32_t id)
 {
 	struct desktop_shell *shell = wl_resource_get_user_data(resource);
 
-	//desktop_shell_send_unmap(shell->child.desktop_shell,
-	//						id, title);
+	desktop_shell_send_del_taskbar_handler(shell->child.desktop_shell,
+	                                       id);
 
-	/* TO BE COMPLETED */
 }
 
-/*
 static const struct taskbar_interface taskbar_implementation = {
 	taskbar_create_handler,
 	taskbar_remove_handler
@@ -3017,7 +3014,8 @@ destroy_shell_surface(struct shell_surface *shsurf)
 
 	wl_signal_emit(&shsurf->destroy_signal, shsurf);
 
-	 /* send signal for taskbar */
+#ifdef HAVE_TASKBAR
+	 /* Taskbar : send signal for taskbar */
 	struct desktop_shell *shell = shsurf->shell;
 	const char *title = "<Default>";
 	 /* */
@@ -3025,7 +3023,7 @@ destroy_shell_surface(struct shell_surface *shsurf)
 			title = strdup(shsurf->title);
 	desktop_shell_send_del_taskbar_handler(shsurf->shell->child.desktop_shell,
 							 				shsurf->id);
-
+#endif
 
 	if (!wl_list_empty(&shsurf->popup.grab_link)) {
 		remove_popup_grab(shsurf);
@@ -3384,10 +3382,10 @@ xdg_surface_set_minimized(struct wl_client *client,
 
 	set_minimized(shsurf);
 
-//#ifdef HAVE_TASKBAR
+#ifdef HAVE_TASKBAR
 	desktop_shell_send_toggle_taskbar_handler(shsurf->shell->child.desktop_shell,
 	                                          shsurf->id);
-//#endif
+#endif
 }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {
@@ -4871,6 +4869,7 @@ map(struct desktop_shell *shell, struct shell_surface *shsurf,
 		} else if (!shsurf->state.relative) {
 			weston_view_set_initial_position(shsurf->view, shell);
 
+#ifdef HAVE_TASKBAR
 			 /* TASKBAR : only detect toplevel surfaces for now */
 			const char *title = "<Default>";
 			if (shsurf->title)
@@ -4885,7 +4884,7 @@ map(struct desktop_shell *shell, struct shell_surface *shsurf,
 		 				 							shsurf->id, title);
 		 	 /* track this shell_surface for later manipulation */
 			wl_list_insert(&shsurf->shell->shsurf_list, &shsurf->link);
-
+#endif
 		}
 		break;
 	case SHELL_SURFACE_POPUP:

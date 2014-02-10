@@ -318,6 +318,15 @@ if test x$enable_clients = xyes; then
   PKG_CHECK_MODULES(PANGO, [pangocairo], [have_pango=yes], [have_pango=no])
 fi
 
+AC_ARG_ENABLE(taskbar,
+              AS_HELP_STRING([--enable-taskbar],
+                             [enable taskbar in desktop-shell and toytoolkit]),,
+              enable_taskbar=no)
+AM_CONDITIONAL(HAVE_TASKBAR, test x$enable_taskbar = xyes)
+if test x$enable_taskbar = xyes; then
+  AC_DEFINE([HAVE_TASKBAR], [1], [Build the optional desktop-shell taskbar])
+fi
+
 AC_ARG_ENABLE(resize-optimization,
               AS_HELP_STRING([--disable-resize-optimization],
                              [disable resize optimization allocating a big buffer in toytoolkit]),,

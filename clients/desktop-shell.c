@@ -201,8 +201,10 @@ is_desktop_painted(struct desktop *desktop)
 	wl_list_for_each(output, &desktop->outputs, link) {
 		if (output->panel && !output->panel->painted)
 			return 0;
+#ifdef HAVE_TASKBAR
 		if (output->taskbar && !output->taskbar->painted)
 			return 0;
+#endif
 		if (output->background && !output->background->painted)
 			return 0;
 	}
@@ -1477,7 +1479,9 @@ output_destroy(struct output *output)
 {
 	background_destroy(output->background);
 	panel_destroy(output->panel);
+#ifdef HAVE_TASKBAR
 	taskbar_remove(output->taskbar);
+#endif
 	wl_output_destroy(output->output);
 	wl_list_remove(&output->link);
 
@@ -1508,7 +1512,9 @@ output_handle_geometry(void *data,
 	struct output *output = data;
 
 	window_set_buffer_transform(output->panel->window, transform);
+#ifdef HAVE_TASKBAR
 	window_set_buffer_transform(output->taskbar->window, transform);
+#endif
 	window_set_buffer_transform(output->background->window, transform);
 }
 
@@ -1536,7 +1542,9 @@ output_handle_scale(void *data,
 	struct output *output = data;
 
 	window_set_buffer_scale(output->panel->window, scale);
+#ifdef HAVE_TASKBAR
 	window_set_buffer_scale(output->taskbar->window, scale);
+#endif
 	window_set_buffer_scale(output->background->window, scale);
 }
 
@@ -1557,10 +1565,12 @@ output_init(struct output *output, struct desktop *desktop)
 	desktop_shell_set_panel(desktop->shell,
 				output->output, surface);
 
+#ifdef HAVE_TASKBAR
 	output->taskbar = taskbar_create(desktop);
 	surface = window_get_wl_surface(output->taskbar->window);
 	desktop_shell_set_taskbar(desktop->shell,
-				output->output, surface);
+				  output->output, surface);
+#endif
 
 	output->background = background_create(desktop);
 	surface = window_get_wl_surface(output->background->window);
