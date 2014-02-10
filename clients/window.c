@@ -4202,7 +4202,6 @@ window_set_minimized(struct window *window)
 		return;
 
 	if (window->type == TYPE_TOPLEVEL) {
-		set_minimized(window->shell_surface);
 		//taskbar_move_surface (window->display->taskbar, window->main_surface->surface);
 		window_defer_redraw_until_configure(window);
 	}
