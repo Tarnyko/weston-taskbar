@@ -3456,14 +3456,11 @@ xdg_get_xdg_surface(struct wl_client *client,
 	struct desktop_shell *shell = wl_resource_get_user_data(resource);
 	struct shell_surface *shsurf;
 
-	if (get_shell_surface(surface)) {
-		wl_resource_post_error(surface_resource,
-				       WL_DISPLAY_ERROR_INVALID_OBJECT,
-				       "desktop_shell::get_shell_surface already requested");
-		return;
+	shsurf = get_shell_surface(surface);
+	if (!shsurf) {
+		shsurf = create_xdg_surface(shell, surface, &xdg_client);
 	}
 
-	shsurf = create_xdg_surface(shell, surface, &xdg_client);
 	if (!shsurf) {
 		wl_resource_post_error(surface_resource,
 				       WL_DISPLAY_ERROR_INVALID_OBJECT,

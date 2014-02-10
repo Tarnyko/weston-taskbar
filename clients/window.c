@@ -67,6 +67,7 @@ typedef void *EGLContext;
 #include "../shared/cairo-util.h"
 #include "text-cursor-position-client-protocol.h"
 #include "workspaces-client-protocol.h"
+#include "xdg-shell-client-protocol.h"
 #include "../shared/os-compatibility.h"
 
 #include "window.h"
@@ -90,6 +91,7 @@ struct display {
 	struct wl_data_device_manager *data_device_manager;
 	struct text_cursor_position *text_cursor_position;
 	struct workspace_manager *workspace_manager;
+	struct xdg_shell *xdg_shell;
 	EGLDisplay dpy;
 	EGLConfig argb_config;
 	EGLContext argb_ctx;
@@ -4202,8 +4204,12 @@ window_set_minimized(struct window *window)
 		return;
 
 	if (window->type == TYPE_TOPLEVEL) {
-		//taskbar_move_surface (window->display->taskbar, window->main_surface->surface);
-		window_defer_redraw_until_configure(window);
+		struct xdg_surface *xdg_surface;
+		xdg_surface = xdg_shell_get_xdg_surface(window->display->xdg_shell, window->main_surface->surface);
+		if (xdg_surface) {
+			xdg_surface_set_minimized(xdg_surface);
+			window_defer_redraw_until_configure(window);
+		}
 	}
 }
 
@@ -5024,6 +5030,9 @@ registry_handle_global(void *data, struct wl_registry *registry, uint32_t id,
 					 &text_cursor_position_interface, 1);
 	} else if (strcmp(interface, "workspace_manager") == 0) {
 		init_workspace_manager(d, id);
+	} else if (strcmp(interface, "xdg_shell") == 0) {
+		d->xdg_shell = wl_registry_bind(registry, id, &xdg_shell_interface, 1);
+		xdg_shell_use_unstable_version(d->xdg_shell, XDG_SHELL_VERSION_CURRENT);
 	} else if (strcmp(interface, "wl_subcompositor") == 0) {
 		d->subcompositor =
 			wl_registry_bind(registry, id,

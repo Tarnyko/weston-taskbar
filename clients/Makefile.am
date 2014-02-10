@@ -91,7 +91,9 @@ libtoytoolkit_la_SOURCES =			\
 	scaler-protocol.c			\
 	scaler-client-protocol.h		\
 	workspaces-protocol.c			\
-	workspaces-client-protocol.h
+	workspaces-client-protocol.h		\
+	xdg-shell-protocol.c			\
+	xdg-shell-client-protocol.h
 
 libtoytoolkit_la_LIBADD =			\
 	$(CLIENT_LIBS)				\
@@ -218,7 +220,9 @@ BUILT_SOURCES =					\
 	scaler-client-protocol.h		\
 	scaler-protocol.c			\
 	workspaces-client-protocol.h		\
-	workspaces-protocol.c
+	workspaces-protocol.c			\
+	xdg-shell-client-protocol.h		\
+	xdg-shell-protocol.c
 
 CLEANFILES = $(BUILT_SOURCES)
 endif
