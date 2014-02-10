@@ -100,6 +100,13 @@
       <arg name="id" type="uint"/>
     </event>
 
+    <event name="toggle_taskbar_handler">
+      <description summary="change a taskbar handler state">
+        A taskbar button has a numeral ID. Change its state.
+      </description>
+      <arg name="id" type="uint"/>
+    </event>
+
     <enum name="cursor">
       <entry name="none" value="0"/>
 

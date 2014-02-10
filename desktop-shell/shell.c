@@ -2461,10 +2461,6 @@ unset_maximized(struct shell_surface *shsurf)
 static void
 set_minimized(struct shell_surface *shsurf)
 {
-#ifdef HAVE_TASKBAR
-	// HERE CALL TASKBAR API
-#endif
-
 	struct workspace *current_ws;
 	struct taskbar *tb;
 	struct weston_seat *seat;
@@ -3387,6 +3383,11 @@ xdg_surface_set_minimized(struct wl_client *client,
 		return;
 
 	set_minimized(shsurf);
+
+//#ifdef HAVE_TASKBAR
+	desktop_shell_send_toggle_taskbar_handler(shsurf->shell->child.desktop_shell,
+	                                          shsurf->id);
+//#endif
 }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {

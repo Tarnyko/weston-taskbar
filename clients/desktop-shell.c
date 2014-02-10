@@ -1336,12 +1336,40 @@ desktop_shell_del_taskbar_handler(void *data,
 
 }
 
+static void
+desktop_shell_toggle_taskbar_handler(void *data,
+			struct desktop_shell *desktop_shell,
+			unsigned int id)
+{
+	/* receive request from the compositor, toggle the taskbar handler state */
+	struct desktop *desktop = data;
+	struct output *output;
+
+	struct taskbar_handler *handler;
+
+	wl_list_for_each(output, &desktop->outputs, link) {
+		if (output->taskbar && output->taskbar->painted) {
+			wl_list_for_each(handler, &output->taskbar->handler_list, link) {
+				if (handler->id == id) {
+					 /* invert the button state */
+					if (handler->state == 0)
+						handler->state = 1;
+					else
+						handler->state = 0;
+				}
+			}
+		}
+	}
+
+}
+
 static const struct desktop_shell_listener desktop_shell_listener = {
 	desktop_shell_configure,
 	desktop_shell_prepare_lock_surface,
 	desktop_shell_grab_cursor,
 	desktop_shell_new_taskbar_handler,
-	desktop_shell_del_taskbar_handler
+	desktop_shell_del_taskbar_handler,
+	desktop_shell_toggle_taskbar_handler
 };
 
 /*
