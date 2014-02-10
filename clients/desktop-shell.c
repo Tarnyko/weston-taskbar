@@ -141,7 +141,7 @@ struct taskbar_handler {
 	int focused, pressed;
 	unsigned int id;
 	char *title;
-    unsigned char state;
+	unsigned char state;
 	struct wl_list link;
 };
 
@@ -607,7 +607,7 @@ taskbar_handler_activate(struct taskbar_handler *handler)
 
 	 /* request the compositor to minimize/raise the window */
 	desktop_shell_set_minimize_surface(handler->taskbar->desktop->shell,
-										handler->id, handler->state);
+	                                   handler->id, handler->state);
 }
 
 static void
@@ -752,8 +752,6 @@ taskbar_destroy_handler(struct taskbar_handler *handler)
 
 	widget_destroy(handler->widget);
 
-	 /* we cannot do the following here, because this is used by the iterator,
-	    which calls "taskbar_destroy_button()"... so do this in the iter instead */
 	wl_list_remove(&handler->link);
 
 	free(handler);

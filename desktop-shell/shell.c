@@ -3966,7 +3966,7 @@ static void
 desktop_shell_set_minimize_surface(struct wl_client *client,
 			       struct wl_resource *resource,
 			       uint32_t id,
-				   uint32_t state)
+			       uint32_t state)
 {
 	// HERE WE WILL LINK THE ID TO THE ACTUAL SHELL SURFACE
 	// AND SET_MINIMIZE() IT (WITHOUT CALLING XDG !!!)
