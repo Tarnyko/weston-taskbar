@@ -4200,7 +4200,7 @@ window_set_maximized(struct window *window, int maximized)
 void
 window_set_minimized(struct window *window)
 {
-	if (!window->display->shell)
+	if (!window->display->xdg_shell)
 		return;
 
 	if (window->type == TYPE_TOPLEVEL) {
