@@ -3380,11 +3380,16 @@ xdg_surface_set_minimized(struct wl_client *client,
 	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
 		return;
 
+#ifdef HAVE_TASKBAR
+	 /* apply compositor's own minimization logic (hide) */
 	set_minimized(shsurf);
 
-#ifdef HAVE_TASKBAR
+	 /* ask taskbar to change corresponding handler button state */
 	desktop_shell_send_toggle_taskbar_handler(shsurf->shell->child.desktop_shell,
 	                                          shsurf->id);
+
+	 /* send request to client to handle minimization on its own */
+	xdg_surface_send_request_set_minimized(shsurf->resource);
 #endif
 }
 
@@ -3964,13 +3969,11 @@ desktop_shell_set_minimize_surface(struct wl_client *client,
 			       uint32_t id,
 			       uint32_t state)
 {
-	// HERE WE WILL LINK THE ID TO THE ACTUAL SHELL SURFACE
-	// AND SET_MINIMIZE() IT (WITHOUT CALLING XDG !!!)
-
 	 /* receive desktop-shell taskbar signal to show/hide */
 	struct desktop_shell *shell = wl_resource_get_user_data(resource);
 	struct shell_surface *shsurf;
 
+#ifdef HAVE_TASKBAR
 	 /* iterate on the memorized toplevel shell_surfaces */
 	wl_list_for_each(shsurf, &shell->shsurf_list, link) {
 		if (shsurf->id == id) {
@@ -3978,13 +3981,18 @@ desktop_shell_set_minimize_surface(struct wl_client *client,
 			if (state) {
 				set_minimized(shsurf); }
 			else {
+				 /* compositor unhides surface */
 				struct workspace *current_ws;
 				current_ws = get_current_workspace(shell);
-
 				move_surface_to_workspace(shell, shsurf, current_ws);
+
+				 /* ask client to handle unmimization on its own */
+				if (shsurf->resource == wl_resource_create(client, &xdg_surface_interface, 1, id))
+					xdg_surface_send_request_unset_minimized(shsurf->resource);
 			}
 		}
-	}	
+	}
+#endif
 }
 
 static void

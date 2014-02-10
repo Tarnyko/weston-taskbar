@@ -317,6 +317,22 @@
       </description>
     </event>
 
+    <event name="request_set_minimized">
+      <description summary="server requests that the client set minimized">
+	Event sent from the compositor to the client requesting that the client
+	goes to a minimized state. It's the client job to call set_minimized
+	and trigger its minimized state.
+      </description>
+    </event>
+
+    <event name="request_unset_minimized">
+      <description summary="server requests that the client unset minimized">
+	Event sent from the compositor to the client requesting that the client
+	leaves the minimized state. It's the client job to call unset_minimized
+	and leave its minimized state.
+      </description>
+     </event>
+
     <request name="set_maximized">
       <description summary="set the surface state as maximized">
 	Set the surface as maximized.

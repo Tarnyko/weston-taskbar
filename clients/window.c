@@ -4201,6 +4201,10 @@ window_set_maximized(struct window *window, int maximized)
 	}
 }
 
+#ifdef HAVE_TASKBAR
+static const struct xdg_surface_listener xdg_surface_listener;
+#endif
+
 void
 window_set_minimized(struct window *window)
 {
@@ -4212,8 +4216,10 @@ window_set_minimized(struct window *window)
 		struct xdg_surface *xdg_surface;
 		xdg_surface = xdg_shell_get_xdg_surface(window->display->xdg_shell, window->main_surface->surface);
 		if (xdg_surface) {
+			 /* listen from further events sent from the compositor */
+			xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, window);
+			 /* ask compositor to minimize this surface */
 			xdg_surface_set_minimized(xdg_surface);
-			window_defer_redraw_until_configure(window);
 		}
 	}
 #else
@@ -5000,6 +5006,83 @@ shm_format(void *data, struct wl_shm *wl_shm, uint32_t format)
 struct wl_shm_listener shm_listener = {
 	shm_format
 };
+
+#ifdef HAVE_TASKBAR
+static void
+xdg_surface_ping(void *data,
+			struct xdg_surface *xdg_surface,
+			unsigned int serial)
+{}
+
+static void
+xdg_surface_configure(void *data,
+			struct xdg_surface *xdg_surface,
+			unsigned int edges,
+			int width,
+			int height)
+{}
+
+static void
+xdg_surface_request_set_fullscreen(void *data,
+			struct xdg_surface *xdg_surface)
+{}
+
+static void
+xdg_surface_request_unset_fullscreen(void *data,
+			struct xdg_surface *xdg_surface)
+{}
+
+static void
+xdg_surface_request_set_maximized(void *data,
+			struct xdg_surface *xdg_surface)
+{}
+
+static void
+xdg_surface_request_unset_maximized(void *data,
+			struct xdg_surface *xdg_surface)
+{}
+
+static void
+xdg_surface_request_set_minimized(void *data,
+			struct xdg_surface *xdg_surface)
+{
+	 /* do not redraw the window when minimized */
+	struct window *window = data;
+	window_defer_redraw_until_configure(window);
+}
+
+static void
+xdg_surface_request_unset_minimized(void *data,
+			struct xdg_surface *xdg_surface)
+{
+	 /* immediately redraw when unmimized */
+	struct window *window = data;
+	window_schedule_redraw(window);
+}
+
+static void
+xdg_surface_focused_set(void *data,
+			struct xdg_surface *xdg_surface)
+{}
+
+static void
+xdg_surface_focused_unset(void *data,
+			struct xdg_surface *xdg_surface)
+{}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+	xdg_surface_ping,
+	xdg_surface_configure,
+	xdg_surface_request_set_fullscreen,
+	xdg_surface_request_unset_fullscreen,
+	xdg_surface_request_set_maximized,
+	xdg_surface_request_unset_maximized,
+	xdg_surface_request_set_minimized,
+	xdg_surface_request_unset_minimized,
+	xdg_surface_focused_set,
+	xdg_surface_focused_unset
+};
+#endif
 
 static void
 registry_handle_global(void *data, struct wl_registry *registry, uint32_t id,
