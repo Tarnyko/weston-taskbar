@@ -2097,6 +2097,26 @@ get_output_panel_height(struct desktop_shell *shell,
 	return panel_height;
 }
 
+static int
+get_output_taskbar_height(struct desktop_shell *shell,
+                          struct weston_output *output)
+{
+        struct weston_view *view;
+        int taskbar_height = 0;
+
+        if (!output)
+                return 0;
+
+        wl_list_for_each(view, &shell->taskbar_layer.view_list, layer_link) {
+                if (view->surface->output == output) {
+                        taskbar_height = view->surface->height;
+                        break;
+                }
+        }
+
+        return taskbar_height;
+}
+
 /* The surface will be inserted into the list immediately after the link
  * returned by this function (i.e. will be stacked immediately above the
  * returned link). */
@@ -2417,17 +2437,19 @@ set_maximized(struct shell_surface *shsurf,
               struct weston_output *output)
 {
 	struct desktop_shell *shell;
-	uint32_t edges = 0, panel_height = 0;
+	uint32_t edges = 0, panel_height = 0, taskbar_height = 0;
 
 	shell_surface_set_output(shsurf, output);
 
 	shell = shell_surface_get_shell(shsurf);
 	panel_height = get_output_panel_height(shell, shsurf->output);
+	taskbar_height = get_output_taskbar_height(shell, shsurf->output);
 	edges = WL_SHELL_SURFACE_RESIZE_TOP | WL_SHELL_SURFACE_RESIZE_LEFT;
 
 	shsurf->client->send_configure(shsurf->surface, edges,
 	                               shsurf->output->width,
-	                               shsurf->output->height - panel_height);
+	                               shsurf->output->height - panel_height
+	                                                      - taskbar_height);
 
 	shsurf->next_state.maximized = true;
 	shsurf->state_changed = true;
