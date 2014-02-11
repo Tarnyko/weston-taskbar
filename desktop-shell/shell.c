@@ -3838,11 +3838,10 @@ taskbar_configure(struct weston_surface *es, int32_t sx, int32_t sy)
 
 	view = container_of(es->views.next, struct weston_view, surface_link);
 
-	  /* UGLY HACK ! */
-     int32_t current_y = view->output->y;
-	 view->output->y = 32;
 	configure_static_view(view, &shell->taskbar_layer);
-	 view->output->y = current_y;
+
+	weston_view_set_position(view, 0, view->output->height
+	                                - view->surface->height);
 }
 
 static void
@@ -5907,8 +5906,8 @@ module_init(struct weston_compositor *ec,
 	ec->shell_interface.set_title = set_title;
 
 	weston_layer_init(&shell->fullscreen_layer, &ec->cursor_layer.link);
-	weston_layer_init(&shell->panel_layer, &shell->fullscreen_layer.link);
 	weston_layer_init(&shell->taskbar_layer, &shell->fullscreen_layer.link);
+	weston_layer_init(&shell->panel_layer, &shell->taskbar_layer.link);
 	weston_layer_init(&shell->background_layer, &shell->panel_layer.link);
 	weston_layer_init(&shell->lock_layer, NULL);
 	weston_layer_init(&shell->input_panel_layer, NULL);
