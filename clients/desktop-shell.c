@@ -720,16 +720,23 @@ taskbar_resize_handler(struct widget *widget,
 {
 	struct taskbar_handler *handler;
 	struct taskbar *taskbar = data;
+	cairo_t *cr;
+	cairo_text_extents_t extents;
 	int x, y, w, h;
 	
 	x = 10;
 	y = 16;
 	wl_list_for_each(handler, &taskbar->handler_list, link) {
-		w = cairo_image_surface_get_width(handler->icon) + 120; // for text !
+		cr = cairo_create (handler->icon);
+		cairo_text_extents (cr, handler->title, &extents);
+
+		w = cairo_image_surface_get_width(handler->icon) + extents.width + 8;
 		h = cairo_image_surface_get_height(handler->icon);
 		widget_set_allocation(handler->widget,
 				      x, y - h / 2, w + 1, h + 1);
 		x += w + 10;
+
+		cairo_destroy (cr);
 	}
 }
 
