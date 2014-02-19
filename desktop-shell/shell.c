@@ -2473,6 +2473,45 @@ unset_maximized(struct shell_surface *shsurf)
 }
 
 static void
+set_minimized(struct weston_surface *surface, uint32_t is_true)
+{
+	struct shell_surface *shsurf;
+	struct workspace *current_ws;
+	struct weston_seat *seat;
+	struct weston_surface *focus;
+	struct weston_view *view;
+
+	view = get_default_view(surface);
+	if (!view)
+		return;
+
+	assert(weston_surface_get_main_surface(view->surface) == view->surface);
+
+	shsurf = get_shell_surface(surface);
+	current_ws = get_current_workspace(shsurf->shell);
+
+	wl_list_remove(&view->layer_link);
+	if (is_true)
+		wl_list_insert(&shsurf->shell->minimized_layer.view_list, &view->layer_link);
+	else
+		wl_list_insert(&current_ws->layer.view_list, &view->layer_link);
+
+	shell_surface_update_child_surface_layers(shsurf);
+
+	drop_focus_state(shsurf->shell, current_ws, view->surface);
+	wl_list_for_each(seat, &shsurf->shell->compositor->seat_list, link) {
+		if (!seat->keyboard)
+			continue;
+
+		focus = weston_surface_get_main_surface(seat->keyboard->focus);
+		if (focus == view->surface)
+			weston_keyboard_set_focus(seat->keyboard, NULL);
+	}
+
+	weston_view_damage_below(view);
+}
+
+static void
 shell_surface_set_maximized(struct wl_client *client,
                             struct wl_resource *resource,
                             struct wl_resource *output_resource)
@@ -3969,12 +4008,8 @@ managed_surface_set_state(struct wl_client *client,
 	struct managed_surface *managed_surface = wl_resource_get_user_data(resource);
 	struct weston_surface *surface = managed_surface->surface;
 
-	if (state)
-		 /* compositor hides surface on its own ; will follow in next patch */
-		weston_log ("minimize stub\n");
-	else
-		 /* compositor unhides surface on its own ; will follow in next patch */
-		weston_log ("unminimize stub\n");
+	 /* compositor hides/unhides surface on its own */
+	set_minimized(surface, state);
 }
 
 static const struct managed_surface_interface managed_surface_implementation = {
@@ -6020,6 +6055,7 @@ module_init(struct weston_compositor *ec,
 	activate_workspace(shell, 0);
 
 	wl_list_init(&shell->managed_surfaces_list);
+	weston_layer_init(&shell->minimized_layer, NULL);
 
 	wl_list_init(&shell->workspaces.anim_sticky_list);
 	wl_list_init(&shell->workspaces.animation.link);
