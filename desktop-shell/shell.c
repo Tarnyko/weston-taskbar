@@ -3406,6 +3406,26 @@ xdg_surface_unset_maximized(struct wl_client *client,
 	shsurf->client->send_configure(shsurf->surface, 0, width, height);
 }
 
+static void
+xdg_surface_set_minimized(struct wl_client *client,
+			    struct wl_resource *resource)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+
+	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
+		return;
+
+	 /* apply compositor's own minimization logic (hide) */
+	set_minimized(shsurf->surface, 1);
+
+	 /* ask taskbar to change corresponding handler button state */
+	struct managed_surface *surface;
+	wl_list_for_each(surface, &shsurf->shell->managed_surfaces_list, link) {
+			if (surface->surface == shsurf->surface)
+				managed_surface_send_state_changed (surface->resource, 1);
+	}
+}
+
 static const struct xdg_surface_interface xdg_surface_implementation = {
 	xdg_surface_destroy,
 	xdg_surface_set_transient_for,
@@ -3419,7 +3439,7 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
 	xdg_surface_unset_fullscreen,
 	xdg_surface_set_maximized,
 	xdg_surface_unset_maximized,
-	NULL /* set_minimized */
+	xdg_surface_set_minimized
 };
 
 static void
