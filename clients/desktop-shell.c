@@ -85,6 +85,16 @@ struct panel {
 	uint32_t color;
 };
 
+struct taskbar {
+	struct surface base;
+	struct window *window;
+	struct widget *widget;
+	struct wl_list handler_list;
+	struct desktop *desktop;
+	int painted;
+	uint32_t color;
+};
+
 struct background {
 	struct surface base;
 	struct window *window;
@@ -102,6 +112,7 @@ struct output {
 	struct wl_list link;
 
 	struct panel *panel;
+	struct taskbar *taskbar;
 	struct background *background;
 };
 
@@ -121,6 +132,16 @@ struct panel_clock {
 	struct panel *panel;
 	struct task clock_task;
 	int clock_fd;
+};
+
+struct taskbar_handler {
+	struct widget *widget;
+	struct taskbar *taskbar;
+	cairo_surface_t *icon;
+	int focused, pressed;
+	char *title;
+	int state;
+	struct wl_list link;
 };
 
 struct unlock_dialog {
@@ -172,6 +193,8 @@ is_desktop_painted(struct desktop *desktop)
 
 	wl_list_for_each(output, &desktop->outputs, link) {
 		if (output->panel && !output->panel->painted)
+			return 0;
+		if (output->taskbar && !output->taskbar->painted)
 			return 0;
 		if (output->background && !output->background->painted)
 			return 0;
@@ -564,6 +587,119 @@ panel_create(struct desktop *desktop)
 	panel_add_launchers(panel, desktop);
 
 	return panel;
+}
+
+static void
+taskbar_redraw_handler(struct widget *widget, void *data)
+{
+	cairo_surface_t *surface;
+	cairo_t *cr;
+	struct taskbar *taskbar = data;
+
+	cr = widget_cairo_create(taskbar->widget);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	set_hex_color(cr, taskbar->color);
+	cairo_paint(cr);
+
+	cairo_destroy(cr);
+	surface = window_get_surface(taskbar->window);
+	cairo_surface_destroy(surface);
+	taskbar->painted = 1;
+	check_desktop_ready(taskbar->window);
+}
+
+static void
+taskbar_resize_handler(struct widget *widget,
+		     int32_t width, int32_t height, void *data)
+{
+	struct taskbar_handler *handler;
+	struct taskbar *taskbar = data;
+	cairo_t *cr;
+	cairo_text_extents_t extents;
+	int x, y, w, h;
+	
+	x = 10;
+	y = 16;
+	wl_list_for_each(handler, &taskbar->handler_list, link) {
+		cr = cairo_create (handler->icon);
+		cairo_text_extents (cr, handler->title, &extents);
+
+		w = cairo_image_surface_get_width(handler->icon) + extents.width + 8;
+		h = cairo_image_surface_get_height(handler->icon);
+		widget_set_allocation(handler->widget,
+				      x, y - h / 2, w + 1, h + 1);
+		x += w + 10;
+
+		cairo_destroy (cr);
+	}
+}
+
+static void
+taskbar_configure(void *data,
+		struct desktop_shell *desktop_shell,
+		uint32_t edges, struct window *window,
+		int32_t width, int32_t height)
+{
+	struct surface *surface = window_get_user_data(window);
+	struct taskbar *taskbar = container_of(surface, struct taskbar, base);
+
+	window_schedule_resize(taskbar->window, width, 32);
+}
+
+static void
+taskbar_destroy_handler(struct taskbar_handler *handler)
+{
+	free(handler->title);
+
+	cairo_surface_destroy(handler->icon);
+
+	widget_destroy(handler->widget);
+	wl_list_remove(&handler->link);
+
+	free(handler);
+}
+
+static void
+taskbar_destroy(struct taskbar *taskbar)
+{
+	struct taskbar_handler *tmp;
+	struct taskbar_handler *handler;
+
+	wl_list_for_each_safe(handler, tmp, &taskbar->handler_list, link) {
+		taskbar_destroy_handler(handler);
+	}
+
+	widget_destroy(taskbar->widget);
+	window_destroy(taskbar->window);
+
+	free(taskbar);
+}
+
+static struct taskbar *
+taskbar_create(struct desktop *desktop)
+{
+	struct taskbar *taskbar;
+	struct weston_config_section *s;
+
+	taskbar = xzalloc(sizeof *taskbar);
+
+	taskbar->base.configure = taskbar_configure;
+	taskbar->desktop = desktop;
+	taskbar->window = window_create_custom(desktop->display);
+	taskbar->widget = window_add_widget(taskbar->window, taskbar);
+	wl_list_init(&taskbar->handler_list);
+
+	window_set_title(taskbar->window, "taskbar");
+	window_set_user_data(taskbar->window, taskbar);
+
+	widget_set_redraw_handler(taskbar->widget, taskbar_redraw_handler);
+	widget_set_resize_handler(taskbar->widget, taskbar_resize_handler);
+
+	s = weston_config_get_section(desktop->config, "shell", NULL, NULL);
+	weston_config_section_get_uint(s, "taskbar-color",
+				       &taskbar->color, 0xaabbbbbb);
+
+	return taskbar;
 }
 
 static cairo_surface_t *
@@ -1128,6 +1264,7 @@ output_destroy(struct output *output)
 {
 	background_destroy(output->background);
 	panel_destroy(output->panel);
+	taskbar_destroy(output->taskbar);
 	wl_output_destroy(output->output);
 	wl_list_remove(&output->link);
 
@@ -1158,6 +1295,7 @@ output_handle_geometry(void *data,
 	struct output *output = data;
 
 	window_set_buffer_transform(output->panel->window, transform);
+	window_set_buffer_transform(output->taskbar->window, transform);
 	window_set_buffer_transform(output->background->window, transform);
 }
 
@@ -1185,6 +1323,7 @@ output_handle_scale(void *data,
 	struct output *output = data;
 
 	window_set_buffer_scale(output->panel->window, scale);
+	window_set_buffer_scale(output->taskbar->window, scale);
 	window_set_buffer_scale(output->background->window, scale);
 }
 
@@ -1203,6 +1342,11 @@ output_init(struct output *output, struct desktop *desktop)
 	output->panel = panel_create(desktop);
 	surface = window_get_wl_surface(output->panel->window);
 	desktop_shell_set_panel(desktop->shell,
+				output->output, surface);
+
+	output->taskbar = taskbar_create(desktop);
+	surface = window_get_wl_surface(output->taskbar->window);
+	desktop_shell_set_taskbar(desktop->shell,
 				output->output, surface);
 
 	output->background = background_create(desktop);

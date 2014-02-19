@@ -124,6 +124,7 @@ struct desktop_shell {
 
 	struct weston_layer fullscreen_layer;
 	struct weston_layer panel_layer;
+	struct weston_layer taskbar_layer;
 	struct weston_layer background_layer;
 	struct weston_layer lock_layer;
 	struct weston_layer input_panel_layer;
