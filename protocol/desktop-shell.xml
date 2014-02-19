@@ -68,6 +68,14 @@
       </description>
     </event>
 
+    <event name="add_managed_surface">
+      <description summary="tell client to manage a new surface">
+	Tell the shell there is a new surface to manage, informing some
+	GUI components such as the taskbar.
+      </description>
+      <arg name="id" type="new_id" interface="managed_surface"/>
+    </event>
+
     <event name="grab_cursor">
       <description summary="tell client what cursor to show during a grab">
 	This event will be sent immediately before a fake enter event on the
@@ -96,6 +104,47 @@
 
       <entry name="busy" value="11"/>
     </enum>
+  </interface>
+
+  <interface name="managed_surface" version="1">
+    <description summary="interface for handling managed surfaces">
+      Only one client can bind this interface at a time.
+    </description>
+
+     <request name="set_state">
+      <description summary="set managed surface state">
+	The client can ask the state of the shell surface linked to a managed
+	surface to be changed. It currently supports minimization.
+      </description>
+       <arg name="state" type="uint"/>
+     </request>
+
+     <event name="state_changed">
+      <description summary="tell client managed surface state was changed">
+	This event will be sent immediately after the shell suface linked to a
+	managed surface had its state changed. It currently supports minimization.
+      </description>
+       <arg name="state" type="uint"/>
+     </event>
+
+     <event name="title_changed">
+      <description summary="tell client managed surface title was changed">
+	This event will be sent immediately after the title of the shell surface
+	linked to a managed surface has been changed.
+      </description>
+       <arg name="title" type="string"/>
+     </event>
+
+     <event name="removed">
+      <description summary="remove a managed surface">
+	This event will be sent when a managed surface is removed.
+      </description>
+     </event>
+
+     <enum name="state">
+       <entry name="normal" value="0"/>
+       <entry name="minimized" value="1"/>
+     </enum>
   </interface>
 
   <interface name="screensaver" version="1">

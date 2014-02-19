@@ -2023,6 +2023,14 @@ set_title(struct shell_surface *shsurf, const char *title)
 {
 	free(shsurf->title);
 	shsurf->title = strdup(title);
+
+	if (shsurf->type == SHELL_SURFACE_TOPLEVEL) {
+		struct managed_surface *managed_surface;
+		wl_list_for_each(managed_surface, &shsurf->shell->managed_surfaces_list, link) {
+			if (managed_surface->surface == shsurf->surface)
+				managed_surface_send_title_changed (managed_surface->resource, shsurf->title);
+		}
+	}
 }
 
 static void
@@ -2991,6 +2999,16 @@ destroy_shell_surface(struct shell_surface *shsurf)
 		remove_popup_grab(shsurf);
 	}
 
+	if (shsurf->type == SHELL_SURFACE_TOPLEVEL) {
+		struct managed_surface *managed_surface;
+		wl_list_for_each(managed_surface, &shsurf->shell->managed_surfaces_list, link) {
+			if (managed_surface->surface == shsurf->surface) {
+				managed_surface_send_removed (managed_surface->resource);
+				wl_list_remove(&managed_surface->link);
+			}
+		}
+	}
+
 	if (shsurf->fullscreen.type == WL_SHELL_SURFACE_FULLSCREEN_METHOD_DRIVER &&
 	    shell_surface_is_top_fullscreen(shsurf))
 		restore_output_mode (shsurf->fullscreen_output);
@@ -3941,6 +3959,27 @@ static const struct desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_desktop_ready
 };
 
+static void
+managed_surface_set_state(struct wl_client *client,
+			struct wl_resource *resource,
+			uint32_t state)
+{
+	 /* receive desktop-shell taskbar signal to show/hide */
+	struct managed_surface *managed_surface = wl_resource_get_user_data(resource);
+	struct weston_surface *surface = managed_surface->surface;
+
+	if (state)
+		 /* compositor hides surface on its own ; will follow in next patch */
+		weston_log ("minimize stub\n");
+	else
+		 /* compositor unhides surface on its own ; will follow in next patch */
+		weston_log ("unminimize stub\n");
+}
+
+static const struct managed_surface_interface managed_surface_implementation = {
+	managed_surface_set_state
+};
+
 static enum shell_surface_type
 get_shell_surface_type(struct weston_surface *surface)
 {
@@ -4847,6 +4886,28 @@ map(struct desktop_shell *shell, struct shell_surface *shsurf,
 	case SHELL_SURFACE_NONE:
 	default:
 		break;
+	}
+
+	if (shsurf->type == SHELL_SURFACE_TOPLEVEL) {
+		struct managed_surface *surface;
+		surface = calloc(1, sizeof *surface);
+
+		if (surface) {
+			struct wl_client *client;
+			client = wl_resource_get_client(shsurf->shell->child.desktop_shell);
+			surface->surface = shsurf->surface;
+			surface->resource = wl_resource_create(client,
+			                                       &managed_surface_interface, 1, 0);
+			wl_resource_set_implementation(surface->resource,
+					                       &managed_surface_implementation,
+					                       surface, NULL);
+
+			desktop_shell_send_add_managed_surface(shsurf->shell->child.desktop_shell,
+			                                       surface->resource);
+			wl_list_insert(shsurf->shell->managed_surfaces_list.prev, &surface->link);
+		} else {
+			weston_log("Could not create managed surface\n");
+		}
 	}
 
 	if (shsurf->type == SHELL_SURFACE_TOPLEVEL &&
@@ -5956,6 +6017,8 @@ module_init(struct weston_compositor *ec,
 			return -1;
 	}
 	activate_workspace(shell, 0);
+
+	wl_list_init(&shell->managed_surfaces_list);
 
 	wl_list_init(&shell->workspaces.anim_sticky_list);
 	wl_list_init(&shell->workspaces.animation.link);

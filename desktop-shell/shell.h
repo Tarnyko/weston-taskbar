@@ -93,6 +93,12 @@ struct focus_surface {
 	struct weston_transform workspace_transform;
 };
 
+struct managed_surface {
+	struct wl_resource *resource;
+	struct weston_surface *surface;
+	struct wl_list link;
+};
+
 struct workspace {
 	struct weston_layer layer;
 
@@ -197,6 +203,8 @@ struct desktop_shell {
 	enum animation_type win_animation_type;
 	enum animation_type startup_animation_type;
 	enum animation_type focus_animation_type;
+
+	struct wl_list managed_surfaces_list;
 
 	struct wl_listener output_create_listener;
 	struct wl_listener output_move_listener;

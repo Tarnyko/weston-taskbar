@@ -139,6 +139,7 @@ struct taskbar_handler {
 	struct taskbar *taskbar;
 	cairo_surface_t *icon;
 	int focused, pressed;
+	struct managed_surface *surface;
 	char *title;
 	int state;
 	struct wl_list link;
@@ -184,6 +185,14 @@ show_menu(struct panel *panel, struct input *input, uint32_t time)
 	window_show_menu(window_get_display(panel->window),
 			 input, time, panel->window,
 			 x - 10, y - 10, menu_func, entries, 4);
+}
+
+static void
+update_window(struct window *window)
+{
+	struct rectangle allocation;
+	window_get_allocation(window, &allocation);
+	window_schedule_resize(window, allocation.width, allocation.height);
 }
 
 static int
@@ -1113,6 +1122,20 @@ desktop_shell_prepare_lock_surface(void *data,
 }
 
 static void
+desktop_shell_add_managed_surface(void *data,
+				   struct desktop_shell *desktop_shell,
+				   struct managed_surface *managed_surface)
+{
+	struct desktop *desktop = data;
+	struct output *output;
+
+	wl_list_for_each(output, &desktop->outputs, link) {
+		/* will follow in next patch : add the actual handler here */
+		update_window(output->taskbar->window);
+	}
+}
+
+static void
 desktop_shell_grab_cursor(void *data,
 			  struct desktop_shell *desktop_shell,
 			  uint32_t cursor)
@@ -1162,7 +1185,53 @@ desktop_shell_grab_cursor(void *data,
 static const struct desktop_shell_listener listener = {
 	desktop_shell_configure,
 	desktop_shell_prepare_lock_surface,
+	desktop_shell_add_managed_surface,
 	desktop_shell_grab_cursor
+};
+
+static void
+managed_surface_state_changed(void *data,
+		struct managed_surface *managed_surface,
+		uint32_t state)
+{
+	struct taskbar_handler *handler = data;
+
+	if (handler->surface == managed_surface) {
+		/* set the handler state */
+		handler->state = state;
+	}
+}
+
+static void
+managed_surface_title_changed(void *data,
+		struct managed_surface *managed_surface,
+		const char *title)
+{
+	struct taskbar_handler *handler = data;
+
+	if (handler->surface == managed_surface) {
+		/* change the handler title text */
+		handler->title = strdup(title);
+		update_window(handler->taskbar->window);
+	}
+}
+
+static void
+managed_surface_removed(void *data,
+		struct managed_surface *managed_surface)
+{
+	struct taskbar_handler *handler = data;
+
+	if (handler->surface == managed_surface) {
+		/* will follow in next patch : destroy the actual handler here */
+		update_window(handler->taskbar->window);
+	}
+}
+
+static const struct managed_surface_listener managed_surface_listener = {
+	managed_surface_state_changed,
+	managed_surface_title_changed,
+	managed_surface_removed
 };
 
 static void
