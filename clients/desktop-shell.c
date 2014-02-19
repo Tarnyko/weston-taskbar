@@ -599,6 +599,52 @@ panel_create(struct desktop *desktop)
 }
 
 static void
+taskbar_handler_activate(struct taskbar_handler *handler)
+{
+	 /* invert the handler state */
+	if (handler->state == 0)
+		handler->state = 1;
+	else
+		handler->state = 0;
+
+	 /* request the compositor to minimize/raise the window */
+	managed_surface_set_state(handler->surface, handler->state);
+}
+
+static void
+taskbar_handler_redraw_handler(struct widget *widget, void *data)
+{
+	struct taskbar_handler *handler = data;
+	struct rectangle allocation;
+	cairo_t *cr;
+
+	cr = widget_cairo_create(handler->taskbar->widget);
+
+	widget_get_allocation(widget, &allocation);
+	if (handler->pressed) {
+		allocation.x++;
+		allocation.y++;
+	}
+
+	cairo_set_source_surface(cr, handler->icon,
+				 allocation.x, allocation.y);
+	cairo_paint(cr);
+
+	cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+	/* cairo_set_font_size (cr, 20); */
+	cairo_move_to (cr, allocation.x+20, allocation.y+12);
+	cairo_show_text (cr, handler->title);
+
+	if (handler->focused) {
+		cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.4);
+		cairo_mask_surface(cr, handler->icon,
+				   allocation.x, allocation.y);
+	}
+
+	cairo_destroy(cr);
+}
+
+static void
 taskbar_redraw_handler(struct widget *widget, void *data)
 {
 	cairo_surface_t *surface;
@@ -615,6 +661,44 @@ taskbar_redraw_handler(struct widget *widget, void *data)
 	cairo_surface_destroy(surface);
 	taskbar->painted = 1;
 	check_desktop_ready(taskbar->window);
+}
+
+static int
+taskbar_handler_enter_handler(struct widget *widget, struct input *input,
+			     float x, float y, void *data)
+{
+	struct taskbar_handler *handler = data;
+
+	handler->focused = 1;
+	widget_schedule_redraw(widget);
+
+	return CURSOR_LEFT_PTR;
+}
+
+static void
+taskbar_handler_leave_handler(struct widget *widget,
+			     struct input *input, void *data)
+{
+	struct taskbar_handler *handler = data;
+
+	handler->focused = 0;
+	/* no tooltip yet... */
+	/* widget_destroy_tooltip(widget); */
+	widget_schedule_redraw(widget);
+}
+
+static void
+taskbar_handler_button_handler(struct widget *widget,
+			      struct input *input, uint32_t time,
+			      uint32_t butt,
+			      enum wl_pointer_button_state state, void *data)
+{
+	struct taskbar_handler *handler;
+
+	handler = widget_get_user_data(widget);
+	widget_schedule_redraw(widget);
+	if (state == WL_POINTER_BUTTON_STATE_RELEASED)
+		taskbar_handler_activate(handler);
 }
 
 static void
@@ -820,6 +904,39 @@ panel_add_launcher(struct panel *panel, const char *icon, const char *path)
 				  panel_launcher_redraw_handler);
 	widget_set_motion_handler(launcher->widget,
 				  panel_launcher_motion_handler);
+}
+
+static const struct managed_surface_listener managed_surface_listener;
+
+static void
+taskbar_add_handler(struct taskbar *taskbar,
+			        struct managed_surface *managed_surface, 
+			        const char *title)
+{
+	struct taskbar_handler *handler;
+
+	handler = xzalloc(sizeof *handler);
+	handler->icon = load_icon_or_fallback(DATADIR "/weston/icon_window.png");
+	handler->surface = managed_surface;
+	handler->title = strdup(title);
+	handler->state = 0;
+
+	handler->taskbar = taskbar;
+	wl_list_insert(taskbar->handler_list.prev, &handler->link);
+
+	handler->widget = widget_add_widget(taskbar->widget, handler);
+	widget_set_enter_handler(handler->widget,
+				 taskbar_handler_enter_handler);
+	widget_set_leave_handler(handler->widget,
+				   taskbar_handler_leave_handler);
+	widget_set_button_handler(handler->widget,
+				    taskbar_handler_button_handler);
+	widget_set_redraw_handler(handler->widget,
+				  taskbar_handler_redraw_handler);
+
+	managed_surface_add_listener(handler->surface,
+	                             &managed_surface_listener,
+	                             handler);
 }
 
 enum {
@@ -1130,7 +1247,8 @@ desktop_shell_add_managed_surface(void *data,
 	struct output *output;
 
 	wl_list_for_each(output, &desktop->outputs, link) {
-		/* will follow in next patch : add the actual handler here */
+		/* add a handler with default title */
+		taskbar_add_handler(output->taskbar, managed_surface, "<Default>");
 		update_window(output->taskbar->window);
 	}
 }
@@ -1223,7 +1341,8 @@ managed_surface_removed(void *data,
 	struct taskbar_handler *handler = data;
 
 	if (handler->surface == managed_surface) {
-		/* will follow in next patch : destroy the actual handler here */
+		/* destroy the handler */
+		taskbar_destroy_handler(handler);
 		update_window(handler->taskbar->window);
 	}
 }

@@ -3001,7 +3001,8 @@ destroy_shell_surface(struct shell_surface *shsurf)
 
 	if (shsurf->type == SHELL_SURFACE_TOPLEVEL) {
 		struct managed_surface *managed_surface;
-		wl_list_for_each(managed_surface, &shsurf->shell->managed_surfaces_list, link) {
+		struct managed_surface *tmp;
+		wl_list_for_each_safe(managed_surface, tmp, &shsurf->shell->managed_surfaces_list, link) {
 			if (managed_surface->surface == shsurf->surface) {
 				managed_surface_send_removed (managed_surface->resource);
 				wl_list_remove(&managed_surface->link);
