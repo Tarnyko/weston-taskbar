@@ -242,6 +242,9 @@ surface_rotate(struct shell_surface *surface, struct weston_seat *seat);
 static void
 shell_fade_startup(struct desktop_shell *shell);
 
+static void
+lock(struct desktop_shell *shell);
+
 static struct shell_seat *
 get_shell_seat(struct weston_seat *seat);
 
@@ -4011,6 +4014,15 @@ desktop_shell_desktop_ready(struct wl_client *client,
 	shell_fade_startup(shell);
 }
 
+static void
+desktop_shell_lock(struct wl_client *client,
+			    struct wl_resource *resource)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+
+	lock(shell);
+}
+
 static const struct desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_set_background,
 	desktop_shell_set_panel,
@@ -4018,7 +4030,8 @@ static const struct desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_set_lock_surface,
 	desktop_shell_unlock,
 	desktop_shell_set_grab_surface,
-	desktop_shell_desktop_ready
+	desktop_shell_desktop_ready,
+	desktop_shell_lock
 };
 
 static void

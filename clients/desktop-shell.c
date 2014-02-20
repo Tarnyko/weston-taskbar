@@ -70,6 +70,8 @@ struct desktop {
 	enum cursor_type grab_cursor;
 
 	int painted;
+
+	char *current_user;
 };
 
 struct surface {
@@ -85,6 +87,8 @@ struct panel {
 	struct widget *widget;
 	struct wl_list launcher_list;
 	struct panel_clock *clock;
+	struct panel_switcher *switcher;
+	struct desktop *desktop;
 	int painted;
 	uint32_t color;
 };
@@ -136,6 +140,11 @@ struct panel_clock {
 	struct panel *panel;
 	struct task clock_task;
 	int clock_fd;
+};
+
+struct panel_switcher {
+	struct widget *widget;
+	struct panel *panel;
 };
 
 struct taskbar_handler {
@@ -450,6 +459,8 @@ panel_clock_redraw_handler(struct widget *widget, void *data)
 	cairo_set_source_rgb(cr, 1, 1, 1);
 	cairo_show_text(cr, string);
 	cairo_destroy(cr);
+
+	widget_schedule_redraw(widget);
 }
 
 static int
@@ -506,6 +517,68 @@ panel_add_clock(struct panel *panel)
 }
 
 static void
+panel_switcher_button_handler(struct widget *widget,
+			      struct input *input, uint32_t time,
+			      uint32_t button,
+			      enum wl_pointer_button_state state, void *data)
+{
+	struct panel_switcher *switcher = data;
+
+	if (state == WL_POINTER_BUTTON_STATE_RELEASED)
+		desktop_shell_lock(switcher->panel->desktop->shell);
+
+}
+
+static void
+panel_switcher_redraw_handler(struct widget *widget, void *data)
+{
+	struct panel_switcher *switcher = data;
+	cairo_t *cr;
+	struct rectangle allocation;
+	cairo_text_extents_t extents;
+	cairo_font_extents_t font_extents;
+	char *username = "Guest";
+
+	if (switcher->panel->desktop->current_user)
+		username = strdup(switcher->panel->desktop->current_user);
+
+	widget_get_allocation(widget, &allocation);
+	if (allocation.width == 0)
+		return;
+
+	cr = widget_cairo_create(switcher->panel->widget);
+	cairo_select_font_face(cr, "sans",
+			       CAIRO_FONT_SLANT_NORMAL,
+			       CAIRO_FONT_WEIGHT_NORMAL);
+	cairo_set_font_size(cr, 14);
+	cairo_text_extents(cr, username, &extents);
+	cairo_font_extents (cr, &font_extents);
+	cairo_move_to(cr, allocation.x + 5,
+		      allocation.y + 3 * (allocation.height >> 2) + 1);
+	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_show_text(cr, username);
+	cairo_move_to(cr, allocation.x + 4,
+		      allocation.y + 3 * (allocation.height >> 2));
+	cairo_set_source_rgb(cr, 1, 1, 1);
+	cairo_show_text(cr, username);
+	cairo_destroy(cr);
+}
+
+static void
+panel_add_switcher(struct panel *panel)
+{
+	struct panel_switcher *switcher;
+
+	switcher = xzalloc(sizeof *switcher);
+	switcher->panel = panel;
+	panel->switcher = switcher;
+
+	switcher->widget = widget_add_widget(panel->widget, switcher);
+	widget_set_button_handler(switcher->widget, panel_switcher_button_handler);
+	widget_set_redraw_handler(switcher->widget, panel_switcher_redraw_handler);
+}
+
+static void
 panel_button_handler(struct widget *widget,
 		     struct input *input, uint32_t time,
 		     uint32_t button,
@@ -534,11 +607,19 @@ panel_resize_handler(struct widget *widget,
 				      x, y - h / 2, w + 1, h + 1);
 		x += w + 10;
 	}
+
 	h=20;
 	w=170;
 
 	if (panel->clock)
 		widget_set_allocation(panel->clock->widget,
+				      width - w - 8 - 120, y - h / 2, w + 1, h + 1);
+
+	h=20;
+	w=120;
+
+	if (panel->switcher)
+		widget_set_allocation(panel->switcher->widget,
 				      width - w - 8, y - h / 2, w + 1, h + 1);
 }
 
@@ -596,6 +677,7 @@ panel_create(struct desktop *desktop)
 	panel = xzalloc(sizeof *panel);
 
 	panel->base.configure = panel_configure;
+	panel->desktop = desktop;
 	panel->window = window_create_custom(desktop->display);
 	panel->widget = window_add_widget(panel->window, panel);
 	wl_list_init(&panel->launcher_list);
@@ -608,6 +690,7 @@ panel_create(struct desktop *desktop)
 	widget_set_button_handler(panel->widget, panel_button_handler);
 	
 	panel_add_clock(panel);
+	panel_add_switcher(panel);
 
 	s = weston_config_get_section(desktop->config, "shell", NULL, NULL);
 	weston_config_section_get_uint(s, "panel-color",
@@ -966,6 +1049,7 @@ password_dialog_button_handler(struct widget *widget,
 
 	if (button == BTN_LEFT) {
 		if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
+			dialog->entry->dialog->desktop->current_user = strdup(dialog->entry->name);
 			display_defer(desktop->display, &desktop->unlock_task);
 		}
 	}
@@ -1068,19 +1152,19 @@ user_entry_button_handler(struct widget *widget,
 			      uint32_t button,
 			      enum wl_pointer_button_state state, void *data)
 {
-	struct user_entry *entry;
+	struct user_entry *entry = data;
 
 	// TO UNLOCK DIRECTLY FROM THE ENTRY - FIX IT 
 	if (button == BTN_LEFT) {
 		if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
+			entry->dialog->desktop->current_user = strdup(entry->name);
 			display_defer(entry->dialog->desktop->display, &entry->dialog->desktop->unlock_task);
 		}
 	}
 
-	entry = widget_get_user_data(widget);
 	widget_schedule_redraw(widget);
-	if (state == WL_POINTER_BUTTON_STATE_RELEASED)
-		user_entry_activate(entry);
+	//if (state == WL_POINTER_BUTTON_STATE_RELEASED)
+	//	user_entry_activate(entry);
 }
 
 static void
@@ -1929,6 +2013,8 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "failed to create display: %m\n");
 		return -1;
 	}
+
+	desktop.current_user = NULL;
 
 	display_set_user_data(desktop.display, &desktop);
 	display_set_global_handler(desktop.display, global_handler);
