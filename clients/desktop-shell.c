@@ -1288,14 +1288,15 @@ desktop_shell_grab_cursor(void *data,
 static void
 desktop_shell_add_managed_surface(void *data,
 				   struct desktop_shell *desktop_shell,
-				   struct managed_surface *managed_surface)
+				   struct managed_surface *managed_surface,
+				   const char *title)
 {
 	struct desktop *desktop = data;
 	struct output *output;
 
 	wl_list_for_each(output, &desktop->outputs, link) {
 		/* add a handler with default title */
-		taskbar_add_handler(output->taskbar, managed_surface, "<Default>");
+		taskbar_add_handler(output->taskbar, managed_surface, title);
 		update_window(output->taskbar->window);
 	}
 }

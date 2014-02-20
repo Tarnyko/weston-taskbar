@@ -82,6 +82,7 @@
 	GUI components such as the taskbar.
       </description>
       <arg name="id" type="new_id" interface="managed_surface"/>
+      <arg name="title" type="string"/>
     </event>
 
     <enum name="cursor">
