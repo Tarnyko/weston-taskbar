@@ -550,7 +550,7 @@ weston_desktop_shell_SOURCES = clients/desktop-shell.c
 nodist_weston_desktop_shell_SOURCES =			\
 	protocol/desktop-shell-client-protocol.h	\
 	protocol/desktop-shell-protocol.c
-weston_desktop_shell_LDADD = libtoytoolkit.la
+weston_desktop_shell_LDADD = libtoytoolkit.la $(PAM_LIBS)
 weston_desktop_shell_CFLAGS = $(AM_CFLAGS) $(CLIENT_CFLAGS)
 
 if BUILD_FULL_GL_CLIENTS

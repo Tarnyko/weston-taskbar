@@ -6136,5 +6136,7 @@ module_init(struct weston_compositor *ec,
 
 	shell_fade_init(shell);
 
+	lock(shell);
+
 	return 0;
 }
