@@ -3960,6 +3960,8 @@ resume_desktop(struct desktop_shell *shell)
 	wl_list_insert(&shell->compositor->cursor_layer.link,
 		       &shell->fullscreen_layer.link);
 	wl_list_insert(&shell->fullscreen_layer.link,
+		       &shell->taskbar_layer.link);
+	wl_list_insert(&shell->taskbar_layer.link,
 		       &shell->panel_layer.link);
 	if (shell->showing_input_panels) {
 		wl_list_insert(&shell->panel_layer.link,
@@ -4585,6 +4587,7 @@ lock(struct desktop_shell *shell)
 	 * input events while we are locked. */
 
 	wl_list_remove(&shell->panel_layer.link);
+	wl_list_remove(&shell->taskbar_layer.link);
 	wl_list_remove(&shell->fullscreen_layer.link);
 	if (shell->showing_input_panels)
 		wl_list_remove(&shell->input_panel_layer.link);
