@@ -68,20 +68,20 @@
       </description>
     </event>
 
-    <event name="add_managed_surface">
-      <description summary="tell client to manage a new surface">
-	Tell the shell there is a new surface to manage, informing some
-	GUI components such as the taskbar.
-      </description>
-      <arg name="id" type="new_id" interface="managed_surface"/>
-    </event>
-
     <event name="grab_cursor">
       <description summary="tell client what cursor to show during a grab">
 	This event will be sent immediately before a fake enter event on the
 	grab surface.
       </description>
       <arg name="cursor" type="uint"/>
+    </event>
+
+    <event name="add_managed_surface">
+      <description summary="tell client to manage a new surface">
+	Tell the shell there is a new surface to manage, informing some
+	GUI components such as the taskbar.
+      </description>
+      <arg name="id" type="new_id" interface="managed_surface"/>
     </event>
 
     <enum name="cursor">
@@ -108,8 +108,15 @@
 
   <interface name="managed_surface" version="1">
     <description summary="interface for handling managed surfaces">
-      Only one client can bind this interface at a time.
+      Managed surfaces are abstractions for specific shell surfaces.
     </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="remove managed_surface interface">
+	The managed_surface interface is removed and ceases to refer
+	to anything.
+      </description>
+    </request>
 
      <request name="set_state">
       <description summary="set managed surface state">

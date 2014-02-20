@@ -4020,6 +4020,13 @@ static const struct desktop_shell_interface desktop_shell_implementation = {
 };
 
 static void
+managed_surface_destroy(struct wl_client *client,
+		    struct wl_resource *resource)
+{
+	wl_resource_destroy(resource);
+}
+
+static void
 managed_surface_set_state(struct wl_client *client,
 			struct wl_resource *resource,
 			uint32_t state)
@@ -4033,6 +4040,7 @@ managed_surface_set_state(struct wl_client *client,
 }
 
 static const struct managed_surface_interface managed_surface_implementation = {
+	managed_surface_destroy,
 	managed_surface_set_state
 };
 

@@ -1239,21 +1239,6 @@ desktop_shell_prepare_lock_surface(void *data,
 }
 
 static void
-desktop_shell_add_managed_surface(void *data,
-				   struct desktop_shell *desktop_shell,
-				   struct managed_surface *managed_surface)
-{
-	struct desktop *desktop = data;
-	struct output *output;
-
-	wl_list_for_each(output, &desktop->outputs, link) {
-		/* add a handler with default title */
-		taskbar_add_handler(output->taskbar, managed_surface, "<Default>");
-		update_window(output->taskbar->window);
-	}
-}
-
-static void
 desktop_shell_grab_cursor(void *data,
 			  struct desktop_shell *desktop_shell,
 			  uint32_t cursor)
@@ -1300,11 +1285,26 @@ desktop_shell_grab_cursor(void *data,
 	}
 }
 
+static void
+desktop_shell_add_managed_surface(void *data,
+				   struct desktop_shell *desktop_shell,
+				   struct managed_surface *managed_surface)
+{
+	struct desktop *desktop = data;
+	struct output *output;
+
+	wl_list_for_each(output, &desktop->outputs, link) {
+		/* add a handler with default title */
+		taskbar_add_handler(output->taskbar, managed_surface, "<Default>");
+		update_window(output->taskbar->window);
+	}
+}
+
 static const struct desktop_shell_listener listener = {
 	desktop_shell_configure,
 	desktop_shell_prepare_lock_surface,
-	desktop_shell_add_managed_surface,
-	desktop_shell_grab_cursor
+	desktop_shell_grab_cursor,
+	desktop_shell_add_managed_surface
 };
 
 static void
@@ -1344,6 +1344,8 @@ managed_surface_removed(void *data,
 		/* destroy the handler */
 		taskbar_destroy_handler(handler);
 		update_window(handler->taskbar->window);
+
+		managed_surface_destroy(managed_surface);
 	}
 }
 
