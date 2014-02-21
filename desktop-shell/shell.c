@@ -840,6 +840,7 @@ workspace_create(void)
 	ws->fsurf_front = NULL;
 	ws->fsurf_back = NULL;
 	ws->focus_animation = NULL;
+	ws->username = NULL;
 
 	return ws;
 }
@@ -3975,6 +3976,31 @@ resume_desktop(struct desktop_shell *shell)
 		wl_list_insert(&shell->panel_layer.link, &ws->layer.link);
 	}
 
+	struct workspace **cuws; int i=0;
+
+	wl_array_for_each(cuws, &shell->workspaces.array) {
+		if ((*cuws)->username) {
+			if (strcmp((*cuws)->username, shell->current_user) == 0) {
+				wl_list_remove (&ws->layer.link);
+				wl_list_insert(&shell->panel_layer.link, &(*cuws)->layer.link);
+				shell->workspaces.current = i;
+				goto end;
+			}
+		}
+		i++;
+	}
+
+	struct workspace **uws;
+	uws = wl_array_add(&shell->workspaces.array, sizeof *uws);
+	*uws = workspace_create();
+	(*uws)->username = strdup (shell->current_user);
+	shell->workspaces.num++;
+	 /* */
+	wl_list_remove (&ws->layer.link);
+	wl_list_insert(&shell->panel_layer.link, &(*uws)->layer.link);
+	shell->workspaces.current = shell->workspaces.num-1;
+
+end:
 	restore_focus_state(shell, get_current_workspace(shell));
 
 	shell->locked = false;
@@ -4023,6 +4049,16 @@ desktop_shell_lock(struct wl_client *client,
 	lock(shell);
 }
 
+static void
+desktop_shell_set_current_user(struct wl_client *client,
+			    struct wl_resource *resource,
+				const char *user)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+
+	shell->current_user = strdup(user);
+}
+
 static const struct desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_set_background,
 	desktop_shell_set_panel,
@@ -4031,7 +4067,8 @@ static const struct desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_unlock,
 	desktop_shell_set_grab_surface,
 	desktop_shell_desktop_ready,
-	desktop_shell_lock
+	desktop_shell_lock,
+	desktop_shell_set_current_user
 };
 
 static void
@@ -6097,6 +6134,8 @@ module_init(struct weston_compositor *ec,
 			return -1;
 
 		*pws = workspace_create();
+		if (i == 0)
+			(*pws)->username = strdup ("Guest");
 		if (*pws == NULL)
 			return -1;
 	}
@@ -6150,6 +6189,8 @@ module_init(struct weston_compositor *ec,
 	shell_fade_init(shell);
 
 	lock(shell);
+
+	shell->current_user = strdup ("Guest");
 
 	return 0;
 }

@@ -1050,6 +1050,7 @@ password_dialog_button_handler(struct widget *widget,
 	if (button == BTN_LEFT) {
 		if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
 			dialog->entry->dialog->desktop->current_user = strdup(dialog->entry->name);
+			desktop_shell_set_current_user(dialog->entry->dialog->desktop->shell, dialog->entry->dialog->desktop->current_user);
 			display_defer(desktop->display, &desktop->unlock_task);
 		}
 	}
@@ -1158,6 +1159,7 @@ user_entry_button_handler(struct widget *widget,
 	if (button == BTN_LEFT) {
 		if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
 			entry->dialog->desktop->current_user = strdup(entry->name);
+			desktop_shell_set_current_user(entry->dialog->desktop->shell, entry->dialog->desktop->current_user);
 			display_defer(entry->dialog->desktop->display, &entry->dialog->desktop->unlock_task);
 		}
 	}
@@ -1537,6 +1539,7 @@ unlock_dialog_create(struct desktop *desktop)
 		pwd = getpwent ();
 	}
 	endpwent();
+	unlock_dialog_add_user_entry(dialog, "Guest");
 
 	desktop_shell_set_lock_surface(desktop->shell,
 				       window_get_wl_surface(dialog->window));
