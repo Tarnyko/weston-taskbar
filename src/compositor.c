@@ -4149,6 +4149,15 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
+	char *xrd = NULL;
+	xrd = getenv("XDG_RUNTIME_DIR");
+	if (xrd) {
+		char *socket_path;
+		asprintf(&socket_path, "%s/%s", xrd, socket_name);
+		chmod(socket_path, S_IRWXU | S_IRWXG | S_IRWXO);
+		free(socket_path);
+	}
+
 	weston_compositor_wake(ec);
 
 	wl_display_run(display);
