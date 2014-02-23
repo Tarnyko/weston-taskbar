@@ -155,6 +155,7 @@ struct taskbar_handler {
 	int focused, pressed;
 	struct managed_surface *surface;
 	char *title;
+	char *user;
 	int state;
 	struct wl_list link;
 };
@@ -765,30 +766,32 @@ taskbar_handler_redraw_handler(struct widget *widget, void *data)
 	struct rectangle allocation;
 	cairo_t *cr;
 
-	cr = widget_cairo_create(handler->taskbar->widget);
+	if (strcmp(handler->user, handler->taskbar->desktop->current_user) == 0) {
+		cr = widget_cairo_create(handler->taskbar->widget);
 
-	widget_get_allocation(widget, &allocation);
-	if (handler->pressed) {
-		allocation.x++;
-		allocation.y++;
+		widget_get_allocation(widget, &allocation);
+		if (handler->pressed) {
+			allocation.x++;
+			allocation.y++;
+		}
+
+		cairo_set_source_surface(cr, handler->icon,
+					 allocation.x, allocation.y);
+		cairo_paint(cr);
+
+		cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+		/* cairo_set_font_size (cr, 20); */
+		cairo_move_to (cr, allocation.x+20, allocation.y+12);
+		cairo_show_text (cr, handler->title);
+
+		if (handler->focused) {
+			cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.4);
+			cairo_mask_surface(cr, handler->icon,
+					   allocation.x, allocation.y);
+		}
+
+		cairo_destroy(cr);
 	}
-
-	cairo_set_source_surface(cr, handler->icon,
-				 allocation.x, allocation.y);
-	cairo_paint(cr);
-
-	cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
-	/* cairo_set_font_size (cr, 20); */
-	cairo_move_to (cr, allocation.x+20, allocation.y+12);
-	cairo_show_text (cr, handler->title);
-
-	if (handler->focused) {
-		cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.4);
-		cairo_mask_surface(cr, handler->icon,
-				   allocation.x, allocation.y);
-	}
-
-	cairo_destroy(cr);
 }
 
 static void
@@ -843,9 +846,12 @@ taskbar_handler_button_handler(struct widget *widget,
 	struct taskbar_handler *handler;
 
 	handler = widget_get_user_data(widget);
+
+	if (strcmp(handler->user, handler->taskbar->desktop->current_user) == 0) {
 	widget_schedule_redraw(widget);
 	if (state == WL_POINTER_BUTTON_STATE_RELEASED)
 		taskbar_handler_activate(handler);
+	}
 }
 
 static void
@@ -861,16 +867,18 @@ taskbar_resize_handler(struct widget *widget,
 	x = 10;
 	y = 16;
 	wl_list_for_each(handler, &taskbar->handler_list, link) {
-		cr = cairo_create (handler->icon);
-		cairo_text_extents (cr, handler->title, &extents);
+		if (strcmp(handler->user, taskbar->desktop->current_user) == 0) {
+			cr = cairo_create (handler->icon);
+			cairo_text_extents (cr, handler->title, &extents);
 
-		w = cairo_image_surface_get_width(handler->icon) + extents.width + 8;
-		h = cairo_image_surface_get_height(handler->icon);
-		widget_set_allocation(handler->widget,
-				      x, y - h / 2, w + 1, h + 1);
-		x += w + 10;
+			w = cairo_image_surface_get_width(handler->icon) + extents.width + 8;
+			h = cairo_image_surface_get_height(handler->icon);
+			widget_set_allocation(handler->widget,
+					      x, y - h / 2, w + 1, h + 1);
+			x += w + 10;
 
-		cairo_destroy (cr);
+			cairo_destroy (cr);
+		}
 	}
 }
 
@@ -1096,6 +1104,12 @@ password_dialog_button_handler(struct widget *widget,
 			dialog->entry->dialog->desktop->current_user = strdup(dialog->entry->name);
 			desktop_shell_set_current_user(dialog->entry->dialog->desktop->shell, dialog->entry->dialog->desktop->current_user);
 			display_defer(desktop->display, &desktop->unlock_task);
+
+			struct output *output;
+			wl_list_for_each(output, &dialog->entry->dialog->desktop->outputs, link) {
+				if (output->taskbar && output->taskbar->painted)
+					update_window(output->taskbar->window);
+			}
 		}
 	}
 }
@@ -1205,6 +1219,12 @@ user_entry_button_handler(struct widget *widget,
 			entry->dialog->desktop->current_user = strdup(entry->name);
 			desktop_shell_set_current_user(entry->dialog->desktop->shell, entry->dialog->desktop->current_user);
 			display_defer(entry->dialog->desktop->display, &entry->dialog->desktop->unlock_task);
+
+			struct output *output;
+			wl_list_for_each(output, &entry->dialog->desktop->outputs, link) {
+				if (output->taskbar && output->taskbar->painted)
+					update_window(output->taskbar->window);
+			}
 		}
 	}
 
@@ -1274,7 +1294,8 @@ unlock_dialog_add_user_entry(struct unlock_dialog *dialog,
 static void
 taskbar_add_handler(struct taskbar *taskbar,
 			        struct managed_surface *managed_surface, 
-			        const char *title)
+			        const char *title,
+			        const char *user)
 {
 	struct taskbar_handler *handler;
 
@@ -1282,6 +1303,7 @@ taskbar_add_handler(struct taskbar *taskbar,
 	handler->icon = load_icon_or_fallback(DATADIR "/weston/icon_window.png");
 	handler->surface = managed_surface;
 	handler->title = strdup(title);
+	handler->user = strdup(user);
 	handler->state = 0;
 
 	handler->taskbar = taskbar;
@@ -1692,14 +1714,15 @@ static void
 desktop_shell_add_managed_surface(void *data,
 				   struct desktop_shell *desktop_shell,
 				   struct managed_surface *managed_surface,
-				   const char *title)
+				   const char *title,
+				   const char *user)
 {
 	struct desktop *desktop = data;
 	struct output *output;
 
 	wl_list_for_each(output, &desktop->outputs, link) {
 		/* add a handler with default title */
-		taskbar_add_handler(output->taskbar, managed_surface, title);
+		taskbar_add_handler(output->taskbar, managed_surface, title, user);
 		update_window(output->taskbar->window);
 	}
 }

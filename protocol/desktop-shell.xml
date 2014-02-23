@@ -89,6 +89,7 @@
       </description>
       <arg name="id" type="new_id" interface="managed_surface"/>
       <arg name="title" type="string"/>
+      <arg name="user" type="string"/>
     </event>
 
     <enum name="cursor">

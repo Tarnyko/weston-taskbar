@@ -5024,7 +5024,8 @@ map(struct desktop_shell *shell, struct shell_surface *shsurf,
 					                       surface, NULL);
 
 			desktop_shell_send_add_managed_surface(shsurf->shell->child.desktop_shell,
-			                                       surface->resource, title);
+			                                       surface->resource, title,
+			                                       shsurf->shell->current_user);
 			wl_list_insert(shsurf->shell->managed_surfaces_list.prev, &surface->link);
 		} else {
 			weston_log("Could not create managed surface\n");
