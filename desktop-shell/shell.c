@@ -3860,8 +3860,8 @@ taskbar_configure(struct weston_surface *es, int32_t sx, int32_t sy)
 
 	configure_static_view(view, &shell->taskbar_layer);
 
-	weston_view_set_position(view, 0, view->output->height
-	                                - view->surface->height);
+	weston_view_set_position(view, view->output->x, view->output->height
+	                                              - view->surface->height);
 }
 
 static void
