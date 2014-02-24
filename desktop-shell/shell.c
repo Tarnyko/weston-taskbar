@@ -2495,22 +2495,32 @@ set_minimized(struct weston_surface *surface, uint32_t is_true)
 	current_ws = get_current_workspace(shsurf->shell);
 
 	wl_list_remove(&view->layer_link);
-	if (is_true)
+	 /* hide or show, depending on the state */
+	if (is_true) {
 		wl_list_insert(&shsurf->shell->minimized_layer.view_list, &view->layer_link);
-	else
+
+		drop_focus_state(shsurf->shell, current_ws, view->surface);
+		wl_list_for_each(seat, &shsurf->shell->compositor->seat_list, link) {
+			if (!seat->keyboard)
+				continue;
+
+			focus = weston_surface_get_main_surface(seat->keyboard->focus);
+			if (focus == view->surface)
+				weston_keyboard_set_focus(seat->keyboard, NULL);
+		}
+	}
+	else {
 		wl_list_insert(&current_ws->layer.view_list, &view->layer_link);
 
-	shell_surface_update_child_surface_layers(shsurf);
+		wl_list_for_each(seat, &shsurf->shell->compositor->seat_list, link) {
+			if (!seat->keyboard)
+				continue;
 
-	drop_focus_state(shsurf->shell, current_ws, view->surface);
-	wl_list_for_each(seat, &shsurf->shell->compositor->seat_list, link) {
-		if (!seat->keyboard)
-			continue;
-
-		focus = weston_surface_get_main_surface(seat->keyboard->focus);
-		if (focus == view->surface)
-			weston_keyboard_set_focus(seat->keyboard, NULL);
+			activate(shsurf->shell, view->surface, seat);
+		}
 	}
+
+	shell_surface_update_child_surface_layers(shsurf);
 
 	weston_view_damage_below(view);
 }
