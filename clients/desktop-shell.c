@@ -936,7 +936,7 @@ taskbar_add_handler(struct taskbar *taskbar,
 
 	managed_surface_add_listener(handler->surface,
 	                             &managed_surface_listener,
-	                             handler);
+	                             taskbar->desktop);
 }
 
 enum {
@@ -1313,11 +1313,18 @@ managed_surface_state_changed(void *data,
 		struct managed_surface *managed_surface,
 		uint32_t state)
 {
-	struct taskbar_handler *handler = data;
+	struct desktop *desktop = data;
+	struct output *output;
 
-	if (handler->surface == managed_surface) {
-		/* set the handler state */
-		handler->state = state;
+	wl_list_for_each(output, &desktop->outputs, link) {
+		struct taskbar_handler *handler;
+		struct taskbar_handler *tmp;
+		wl_list_for_each_safe(handler, tmp, &output->taskbar->handler_list, link) {
+			if (handler->surface == managed_surface) {
+				/* set the handler state */
+				handler->state = state;
+			}
+		}
 	}
 }
 
@@ -1326,12 +1333,19 @@ managed_surface_title_changed(void *data,
 		struct managed_surface *managed_surface,
 		const char *title)
 {
-	struct taskbar_handler *handler = data;
+	struct desktop *desktop = data;
+	struct output *output;
 
-	if (handler->surface == managed_surface) {
-		/* change the handler title text */
-		handler->title = strdup(title);
-		update_window(handler->taskbar->window);
+	wl_list_for_each(output, &desktop->outputs, link) {
+		struct taskbar_handler *handler;
+		struct taskbar_handler *tmp;
+		wl_list_for_each_safe(handler, tmp, &output->taskbar->handler_list, link) {
+			if (handler->surface == managed_surface) {
+				/* change the handler title text */
+				handler->title = strdup(title);
+				update_window(handler->taskbar->window);
+			}
+		}
 	}
 }
 
@@ -1339,15 +1353,22 @@ static void
 managed_surface_removed(void *data,
 		struct managed_surface *managed_surface)
 {
-	struct taskbar_handler *handler = data;
+	struct desktop *desktop = data;
+	struct output *output;
 
-	if (handler->surface == managed_surface) {
-		/* destroy the handler */
-		taskbar_destroy_handler(handler);
-		update_window(handler->taskbar->window);
-
-		managed_surface_destroy(managed_surface);
+	wl_list_for_each(output, &desktop->outputs, link) {
+		struct taskbar_handler *handler;
+		struct taskbar_handler *tmp;
+		wl_list_for_each_safe(handler, tmp, &output->taskbar->handler_list, link) {
+			if (handler->surface == managed_surface) {
+				/* destroy the handler */
+				taskbar_destroy_handler(handler);
+				update_window(handler->taskbar->window);
+			}
+		}
 	}
+
+	managed_surface_destroy(managed_surface);
 }
 
 static const struct managed_surface_listener managed_surface_listener = {
