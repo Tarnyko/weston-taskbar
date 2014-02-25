@@ -5453,6 +5453,7 @@ switcher_destroy(struct switcher *switcher)
 		} else {
 			wl_list_remove(&(*minimized)->layer_link);
 			wl_list_insert(&switcher->shell->minimized_layer.view_list, &(*minimized)->layer_link);
+			weston_view_damage_below(*minimized);
 		}
 	}
 	wl_array_release(&switcher->minimized_array);
